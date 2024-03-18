@@ -1,4 +1,5 @@
 import { 
+	IsArray,
 	IsEmail, 
 	IsNotEmpty, 
 	IsNumber 
@@ -16,4 +17,7 @@ export class CreateThreadDto {
 
 	@IsNotEmpty()
 	thread_title: string;
+
+	@IsArray()
+	tag: string[];
 }

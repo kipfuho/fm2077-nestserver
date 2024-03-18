@@ -6,9 +6,13 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Forum, Login, Message, Thread, User } from './db.entity';
 import { format } from 'date-fns';
 import { SHA256, enc } from 'crypto-js';
+import { Login } from './login.entity';
+import { User } from './user.entity';
+import { Forum } from './forum.entity';
+import { Thread } from './thread.entity';
+import { Message } from './message.entity';
 
 @Injectable()
 export class DatabaseService {
@@ -19,13 +23,13 @@ export class DatabaseService {
     @InjectRepository(User)
     private userRepository: Repository<User>,
 
-    @InjectRepository(User)
+    @InjectRepository(Forum)
     private forumRepository: Repository<Forum>,
 
-    @InjectRepository(User)
+    @InjectRepository(Thread)
     private threadRepository: Repository<Thread>,
 
-    @InjectRepository(User)
+    @InjectRepository(Message)
     private messageRepository: Repository<Message>
   ) {}
 
@@ -58,23 +62,13 @@ export class DatabaseService {
       email 
     });
 
+    // Create a login and a user to database
     await this.loginRepository.save(login);
+    await this.createNewUser(username, password, email);
     this.logger.log("API Create new account succeeded: " + username + " " + email);
     return {
       message: "success"
     };
-  }
-
-  // Find an account with username or email match the param
-  async findUserLogin(
-    username: string, 
-    email: string
-  ): Promise<Login | null> {
-    var res = await this.loginRepository.findOne({ where: [
-      {username: username},
-      {email: email}
-    ]});
-    return res;
   }
 
   // Create user information for login account
@@ -82,7 +76,7 @@ export class DatabaseService {
     username: string, 
     password: string, 
     email: string
-  ) : Promise<boolean> {
+  ) : Promise<{ message: string }> {
     // Create a new User and save to database
     const user = this.userRepository.create({ 
       username: username, 
@@ -97,7 +91,8 @@ export class DatabaseService {
     });
 
     await this.userRepository.save(user);
-    return true;
+    this.logger.log("Created new user associated with email: " + email);
+    return { message: "success" };
   }
   
   // Create new forum 
@@ -105,7 +100,7 @@ export class DatabaseService {
     forum_name: string, 
     category: string, 
     about: string
-  ) : Promise<boolean> {
+  ) : Promise<{ message: string }> {
     // Create a new Forum and save to database
     const forum = this.forumRepository.create({ 
       forum_name: forum_name, 
@@ -116,7 +111,7 @@ export class DatabaseService {
     });
 
     await this.forumRepository.save(forum);
-    return true;
+    return { message: "success" };
   }
 
   // Create new thread
@@ -124,8 +119,9 @@ export class DatabaseService {
     forum_id: number, 
     email: string, 
     content: string,
-    thread_title: string
-  ) : Promise<boolean> {
+    thread_title: string,
+    tag: string[]
+  ) : Promise<{ message: string }> {
     // Create a new Thread and save to database
     var create_time = format(new Date(), "yyyy/mm/dd");
     const thread = this.threadRepository.create({ 
@@ -138,11 +134,12 @@ export class DatabaseService {
       last_update_date: create_time, 
       replies: 0, 
       views: 0, 
-      tag: []
+      tag: tag,
+      delete: false
     });
 
     await this.threadRepository.save(thread);
-    return true;
+    return {message: "success" };
   }
 
   // Create new message
@@ -150,7 +147,17 @@ export class DatabaseService {
     thread_id: number, 
     email: string, 
     content: string
-  ) : Promise<boolean> {
+  ) : Promise<{ message: string }> {
+    // Find thread with id 'thread_id'
+    var thread = await this.findThread(thread_id);
+    if(thread === null) {
+      this.logger.log("Created new message failed: Thread not found")
+      throw new HttpException("Thread not found", HttpStatus.BAD_REQUEST);
+    }
+    // Increase replies count
+    thread.replies += 1;
+    await this.threadRepository.save(thread);
+    
     // Create a new Message and save to database
     var create_time = format(new Date(), "yyyy/mm/dd");
     const message = this.messageRepository.create({ 
@@ -162,6 +169,39 @@ export class DatabaseService {
     });
 
     await this.messageRepository.save(message);
-    return true;
+    this.logger.log("Created new message succeeded")
+    return { message: "success" };
+  }
+
+  // Find an account with username or email match the param
+  async findUserLogin(
+    username: string, 
+    email: string
+  ): Promise<Login | null> {
+    var res = await this.loginRepository.findOne({ where: [
+      {username: username},
+      {email: email}
+    ]});
+    return res;
+  }
+
+  // Find a forum with forum_id
+  async findForum(
+    forum_id: number
+  ): Promise<Forum | null> {
+    var res = await this.forumRepository.findOne({ where: {
+      id: forum_id
+    }});
+    return res;
+  }
+
+  // Find a thread with thread_id
+  async findThread(
+    thread_id: number
+  ): Promise<Thread | null> {
+    var res = await this.threadRepository.findOne({ where: {
+      id: thread_id
+    }});
+    return res;
   }
 }
