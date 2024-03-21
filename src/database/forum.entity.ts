@@ -15,7 +15,7 @@ export class Forum {
   @Column()
   forum_name: string;
 
-  @Column()
+  @Column("varchar", { length: 5000 })
   about: string;
 
   @Column()

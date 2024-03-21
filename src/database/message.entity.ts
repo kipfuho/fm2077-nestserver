@@ -18,8 +18,11 @@ export class Message {
   @Column()
   send_time: Date;
 
-  @Column()
+  @Column("varchar", { length: 10000 })
   content: string;
+
+  @Column()
+  last_update_time: Date;
 
   @Column()
   delete: boolean;

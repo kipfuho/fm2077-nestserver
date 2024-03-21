@@ -5,18 +5,18 @@ import {
 	HttpCode, 
 	HttpStatus, 
 	Post, 
-	Request
+	Request,
+	UseGuards
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { Public } from './public';
-import { SHA256, enc } from 'crypto-js';
 import { DatabaseService } from 'src/database/db.service';
 import { CreateUserDto } from 'src/interface/createUserDto';
+import { LocalAuthGuard } from './local-auth.guard';
 
 @Controller()
 export class AuthController {
 	constructor(
-		private readonly authService: AuthService,
 		private readonly databaseService: DatabaseService
 	) {}
 
@@ -30,16 +30,31 @@ export class AuthController {
   }
 
 	@HttpCode(HttpStatus.OK)
-	@Post('login')
 	@Public()
-	signIn(@Body() signInDto: Record<string, any>) {
-		// Hash the password
-		signInDto.password = SHA256(signInDto.password).toString(enc.Hex);
-	  return this.authService.signIn(signInDto.username, signInDto.password);
+  @UseGuards(LocalAuthGuard)
+  @Post('/login')
+  async login(@Request() req) {
+		// will return jwt token for ease
+		// will remove jwt return later
+    return req.user;
+  }
+
+	@HttpCode(HttpStatus.OK)
+	@Get('/logout')
+	logout(@Request() req): any {
+		req.session.destroy();
+		return { msg: 'The user session has ended' }
 	}
 
-  @Get('profile')
+	// just test api for session
+  @Get('/test/profile')
   getProfile(@Request() req) {
     return req.user;
   }
+
+	// just test api for session
+	@Get('/test/protected')
+	getHello(@Request() req): string {
+		return req.user;
+	}
 }

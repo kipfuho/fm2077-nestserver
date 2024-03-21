@@ -1,4 +1,5 @@
-import { Injectable, 
+import { 
+	Injectable, 
 	Logger, 
 	UnauthorizedException 
 } from '@nestjs/common';
@@ -14,19 +15,15 @@ export class AuthService {
 
 	private readonly logger = new Logger(AuthService.name);
 
-	async signIn(
-		username: string, 
-		password: string
-	): Promise<{ access_token: string }> {
-		const user = await this.dbService.findUserLogin(username, username);
-		if (user?.password !== password){
-			this.logger.log("Sign in failed, username not existed or wrong password");
-			throw new UnauthorizedException();
-		}
-		this.logger.log("Sign in succeeded: " + user.email);
-		const payload = { username: user.username };
-    return {
-      access_token: await this.jwtService.signAsync(payload),
-    };
-	}
+	async validateUser(username: string, pass: string): Promise<any> {
+    const user = await this.dbService.findUserLogin(username, username);
+    if (user && user.password === pass) {
+			// create payload for jwt token and return it
+			const payload = { username: user.username, email: user.email };
+			this.logger.log("Logged in: " + user.email);
+      return {access_token: this.jwtService.sign(payload)};
+    }
+		this.logger.log("Wrong password: " + user.email);
+    return null;
+  }
 }

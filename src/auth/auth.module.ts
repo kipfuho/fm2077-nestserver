@@ -4,8 +4,12 @@ import { AuthService } from './auth.service';
 import { DatabaseModule } from 'src/database/db.module';
 import { JwtModule } from '@nestjs/jwt';
 import { APP_GUARD } from '@nestjs/core';
-import { AuthGuard } from './auth.guard';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { PassportModule } from '@nestjs/passport';
+import { LocalStrategy } from './local.strategy';
+import { JwtStrategy } from './jwt.strategy';
+import { JwtAuthGuard } from './jwt-auth.guard';
+import { SessionSerializer } from './session.serializer';
 
 @Module({
   imports: [
@@ -15,9 +19,12 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
       useFactory: (configService: ConfigService) => ({
         global: true,
         secret: configService.get("JWT_SECRET"),
-        signOptions: { expiresIn: '60s' },
+        signOptions: { expiresIn: '600s' },
       }),
       inject: [ConfigService]
+    }),
+    PassportModule.register({
+      session: true,
     }),
   ],
   controllers: [AuthController],
@@ -25,8 +32,11 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
     AuthService, 
     {
       provide: APP_GUARD,
-      useClass: AuthGuard,
+      useClass: JwtAuthGuard,
     },
+    LocalStrategy,
+    JwtStrategy,
+    SessionSerializer
   ]
 })
 export class AuthModule {}

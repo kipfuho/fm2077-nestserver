@@ -24,13 +24,13 @@ export class User {
   @Column({nullable: true})
   date_of_birth: Date;
 
-  @Column({nullable: true})
+  @Column({nullable: true, length: 500})
   location: string;
 
   @Column({nullable: true})
   website: string;
 
-  @Column({nullable: true})
+  @Column({nullable: true, length: 2000})
   about: string;
 
   @Column()

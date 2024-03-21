@@ -6,7 +6,6 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { format } from 'date-fns';
 import { SHA256, enc } from 'crypto-js';
 import { Login } from './login.entity';
 import { User } from './user.entity';
@@ -42,10 +41,12 @@ export class DatabaseService {
     email: string
   ): Promise<{ message: string }> {
     // Check username and email in database
-    var checkExist = await this.loginRepository.findOne({ where: [
-      {username: username},
-      {email: email}
-    ]});
+    var checkExist = await this.loginRepository.findOne({ 
+      where: [
+        {username: username},
+        {email: email}
+      ]
+    });
 
     if (checkExist !== null){
       this.logger.log("API Create new account failed, username or email existed");
@@ -53,7 +54,7 @@ export class DatabaseService {
     }
     
     // Hash the password and get current date
-    var create_time = format(new Date(), "yyyy/mm/dd");
+    var create_time = new Date();
     password = SHA256(password).toString(enc.Hex);
     const login = this.loginRepository.create({ 
       create_time, 
@@ -123,15 +124,15 @@ export class DatabaseService {
     tag: string[]
   ) : Promise<{ message: string }> {
     // Create a new Thread and save to database
-    var create_time = format(new Date(), "yyyy/mm/dd");
+    var create_time = new Date();
     const thread = this.threadRepository.create({ 
       forum_id, 
       author_email: email, 
       thread_title: thread_title, 
       content: content, 
-      create_date: create_time, 
+      create_time: create_time, 
       last_message_id: -1, 
-      last_update_date: create_time, 
+      last_update_time: create_time, 
       replies: 0, 
       views: 0, 
       tag: tag,
@@ -159,7 +160,7 @@ export class DatabaseService {
     await this.threadRepository.save(thread);
     
     // Create a new Message and save to database
-    var create_time = format(new Date(), "yyyy/mm/dd");
+    var create_time = new Date();
     const message = this.messageRepository.create({ 
       thread_id,
       content,
@@ -169,7 +170,7 @@ export class DatabaseService {
     });
 
     await this.messageRepository.save(message);
-    this.logger.log("Created new message succeeded")
+    this.logger.log("Created new message succeeded");
     return { message: "success" };
   }
 
@@ -178,30 +179,242 @@ export class DatabaseService {
     username: string, 
     email: string
   ): Promise<Login | null> {
-    var res = await this.loginRepository.findOne({ where: [
-      {username: username},
-      {email: email}
-    ]});
-    return res;
+    var account = await this.loginRepository.findOne({ 
+      where: [
+        {username: username},
+        {email: email}
+      ]
+    });
+    return account;
+  }
+
+  // Find User profile associated with an email
+  async findUser(
+    email: string
+  ) : Promise<User | null> {
+    var user = await this.userRepository.findOne({
+      where: {
+        email: email
+      }
+    });
+    return user;
   }
 
   // Find a forum with forum_id
   async findForum(
     forum_id: number
   ): Promise<Forum | null> {
-    var res = await this.forumRepository.findOne({ where: {
-      id: forum_id
-    }});
-    return res;
+    var forum = await this.forumRepository.findOne({ 
+      where: {
+        id: forum_id
+      }
+    });
+    return forum;
+  }
+
+  // Find all forums belong to a category
+  async findForumCategory(
+    category: string
+  ) : Promise<Forum[] | null> {
+    var allForums = await this.forumRepository.find({
+      where: {
+        category: category
+      }
+    });
+    return allForums;
+  }
+
+  // Find all forums
+  async findAllForum(): Promise<Forum[] | null> {
+    var allForums = await this.forumRepository.find();
+    return allForums;
   }
 
   // Find a thread with thread_id
   async findThread(
     thread_id: number
   ): Promise<Thread | null> {
-    var res = await this.threadRepository.findOne({ where: {
+    var res = await this.threadRepository.findOne({ 
+      where: {
       id: thread_id
     }});
     return res;
+  }
+
+  // Find all threads of a forum
+  async findAllThreadOfForum(
+    forum_id: number
+  ): Promise<Thread[] | null> {
+    var threads = await this.threadRepository.find({ 
+      where: {
+        forum_id: forum_id
+      }
+    });
+    return threads;
+  }
+
+  // Find all threads of a user
+  async findAllThreadOfUser(
+    email: string
+  ): Promise<Thread[] | null> {
+    var threads = await this.threadRepository.find({ 
+      where: {
+        author_email: email
+      }
+    });
+    return threads;
+  }
+
+  // find a message with id 'message_id'
+  async findMessage(
+    message_id: number
+  ) : Promise<Message | null> {
+    var message = this.messageRepository.findOne({
+      where: {
+        id: message_id
+      }
+    });
+    return message;
+  }
+
+  // Find all messages of a thread
+  async findAllMessageOfThread(
+    thread_id: number
+  ): Promise<Message[] | null> {
+    var messages = await this.messageRepository.find({ 
+      where: {
+        thread_id: thread_id
+      }
+    });
+    return messages;
+  }
+
+  async findAllMessageOfUser(
+    email: string
+  ) : Promise<Message[] | null> {
+    var messages = await this.messageRepository.find({
+      where: {
+        sender_email: email
+      }
+    });
+    return messages;
+  }
+
+  // update password for an account
+  async updatePassword(
+    email: string,
+    password: string
+  ) : Promise<{ message: string } > {
+    // get login and user from database, throw error if not existed
+    var login = await this.findUserLogin(email, email);
+    var user = await this.findUser(email);
+    if(login === null || user === null) {
+      throw new HttpException("Account not existed", HttpStatus.BAD_REQUEST);
+    }
+
+    // update password
+    login.password = password;
+    user.password = password;
+    await this.loginRepository.save(login);
+    await this.userRepository.save(user);
+    return { message: "success" };
+  }
+
+  // update user information
+  async updateUser(
+    email: string,
+    date_of_birth: Date, 
+    location: string, 
+    about: string, 
+    twofa: boolean, 
+    website: string,
+    avatar: string
+  ) : Promise<{ message: string }> {
+    var user = await this.findUser(email);
+    if(user === null) {
+      throw new HttpException("User not existed", HttpStatus.BAD_REQUEST);
+    }
+
+    user.date_of_birth = date_of_birth;
+    user.location = location;
+    user.about = about;
+    user.twofa = twofa;
+    user.website = website;
+    user.avatar = avatar;
+
+    await this.userRepository.save(user);
+    return { message: "success" };
+  }
+
+  // update avatar of user
+  // will implement later
+  async updateAvatarUser(
+    avatar: File
+  ) : Promise<{ message: string }> {
+    return { message: "success" };
+  }
+
+  // update a thread
+  async updateThread(
+    thread_id: number,
+    content: string,
+    thread_title: string,
+    tag: string[]
+  ) : Promise<{ message: string }> {
+    var thread = await this.findThread(thread_id);
+    if(thread === null) {
+      throw new HttpException("Thread not existed", HttpStatus.BAD_REQUEST);
+    }
+    
+    var update_date = new Date();
+    thread.content = content;
+    thread.thread_title = thread_title;
+    thread.last_update_time = update_date;
+    thread.tag = tag;
+    await this.threadRepository.save(thread);
+    return { message: "success" };
+  }
+
+  // update a message
+  async updateMessage(
+    message_id: number,
+    content: string
+  ) : Promise<{ message: string }> {
+    var message = await this.findMessage(message_id);
+    if(message === null) {
+      throw new HttpException("Message not existed", HttpStatus.BAD_REQUEST);
+    }
+
+    var update_date = new Date();
+    message.content = content;
+    message.last_update_time = update_date;
+    this.messageRepository.save(message);
+    return { message: "success" };
+  }
+
+  // delete a thread
+  async deleteThread(
+    thread_id: number
+  ) : Promise<{ message: string }> {
+    var thread = await this.findThread(thread_id);
+    if(thread === null) {
+      throw new HttpException("Thread not existed", HttpStatus.BAD_REQUEST);
+    }
+
+    await this.threadRepository.remove(thread);
+    return { message: "success" };
+  }
+
+  // delete a message
+  async deleteMessage(
+    meesage_id: number
+  ) : Promise<{ message: string }> {
+    var message = await this.findMessage(meesage_id);
+    if(message === null) {
+      throw new HttpException("Thread not existed", HttpStatus.BAD_REQUEST);
+    }
+
+    await this.messageRepository.remove(message);
+    return { message: "success" };
   }
 }

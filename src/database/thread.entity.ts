@@ -21,14 +21,14 @@ export class Thread {
   @Column("simple-array")
   tag: string[];
 
-  @Column()
+  @Column("varchar", { length: 10000 })
   content: string;
 
   @Column()
-  create_date: Date;
+  create_time: Date;
 
   @Column()
-  last_update_date: Date;
+  last_update_time: Date;
 
   @Column()
   replies: number;
