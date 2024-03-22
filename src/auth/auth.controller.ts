@@ -6,13 +6,14 @@ import {
 	HttpStatus, 
 	Post, 
 	Request,
+	Res,
 	UseGuards
 } from '@nestjs/common';
-import { AuthService } from './auth.service';
 import { Public } from './public';
 import { DatabaseService } from 'src/database/db.service';
 import { CreateUserDto } from 'src/interface/createUserDto';
 import { LocalAuthGuard } from './local-auth.guard';
+import { JwtAuthGuard } from './jwt-auth.guard';
 
 @Controller()
 export class AuthController {
@@ -30,13 +31,13 @@ export class AuthController {
   }
 
 	@HttpCode(HttpStatus.OK)
-	@Public()
   @UseGuards(LocalAuthGuard)
   @Post('/login')
-  async login(@Request() req) {
+  async login(@Request() req, @Res({passthrough: true}) res) {
 		// will return jwt token for ease
 		// will remove jwt return later
-    return req.user;
+		console.log(res);
+    return await req.user;
   }
 
 	@HttpCode(HttpStatus.OK)
@@ -46,15 +47,18 @@ export class AuthController {
 		return { msg: 'The user session has ended' }
 	}
 
+  @UseGuards(JwtAuthGuard)
 	// just test api for session
-  @Get('/test/profile')
+  @Get('/auth/profile')
   getProfile(@Request() req) {
     return req.user;
   }
 
 	// just test api for session
-	@Get('/test/protected')
-	getHello(@Request() req): string {
-		return req.user;
+	@HttpCode(HttpStatus.OK)
+  @UseGuards(LocalAuthGuard)
+	@Post('/auth/protected')
+	async getHello(@Request() req, @Res({passthrough: true}) res) {
+		return await req.user;
 	}
 }

@@ -13,16 +13,4 @@ export class AppController {
   getHello(): string {
     return this.appService.getHello();
   }
-
-  @Public()
-  @Post()
-  create(@Body() createUserDto: CreateUserDto) {
-    return 'This action adds a new user';
-  }
-
-  @UseGuards(JwtAuthGuard)
-  @Get('profile')
-  getProfile(@Request() req) {
-    return req.user;
-  }
 }

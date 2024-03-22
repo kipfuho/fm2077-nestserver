@@ -30,10 +30,6 @@ import { SessionSerializer } from './session.serializer';
   controllers: [AuthController],
   providers: [
     AuthService, 
-    {
-      provide: APP_GUARD,
-      useClass: JwtAuthGuard,
-    },
     LocalStrategy,
     JwtStrategy,
     SessionSerializer
