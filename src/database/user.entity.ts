@@ -18,6 +18,12 @@ export class User {
   @Column()
   password: string;
 
+  @Column()
+  messages: number;
+
+  @Column()
+  likes: number;
+
   @Column({nullable: true})
   avatar: string;
 

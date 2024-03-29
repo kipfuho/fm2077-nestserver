@@ -36,6 +36,9 @@ export class Thread {
   @Column()
   views: number;
 
+  @Column("simple-array")
+  reactions: number[];
+
   @Column()
   last_message_id: number;
 

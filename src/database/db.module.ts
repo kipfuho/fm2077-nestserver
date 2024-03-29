@@ -7,6 +7,7 @@ import { User } from './user.entity';
 import { Forum } from './forum.entity';
 import { Message } from './message.entity';
 import { Thread } from './thread.entity';
+import { DataSource } from 'typeorm';
 
 @Module({
   imports: [
@@ -28,7 +29,11 @@ import { Thread } from './thread.entity';
         ],
         synchronize: true,
       }),
-      inject: [ConfigService]
+      inject: [ConfigService],
+      dataSourceFactory: async(options) => {
+        const dataSource = await new DataSource(options).initialize();
+        return dataSource;
+      }
     }),
     TypeOrmModule.forFeature([
       Login, 

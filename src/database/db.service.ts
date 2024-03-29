@@ -5,7 +5,7 @@ import {
   Logger 
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { SHA256, enc } from 'crypto-js';
 import { Login } from './login.entity';
 import { User } from './user.entity';
@@ -33,6 +33,19 @@ export class DatabaseService {
   ) {}
 
   private readonly logger = new Logger(DatabaseService.name);
+
+  // get metadata of database
+  async getMetadata() : Promise<[number, number, number, string]> {
+    let threads = await this.threadRepository.count();
+    let messages = await this.messageRepository.count();
+    let members = await this.loginRepository.count();
+    let lastestMember = await this.loginRepository
+    .createQueryBuilder()
+    .orderBy("create_time", "DESC")
+    .getOne();
+
+    return [threads, messages, members, lastestMember.username];
+  }
   
   // Function attempting to insert new account into login table
   async createNewLogin(
@@ -62,7 +75,7 @@ export class DatabaseService {
       password, 
       email 
     });
-
+    
     // Create a login and a user to database
     await this.loginRepository.save(login);
     await this.createNewUser(username, password, email);
@@ -88,7 +101,9 @@ export class DatabaseService {
       about: null, 
       twofa: false, 
       website: null,
-      avatar: null
+      avatar: null,
+      likes: 0,
+      messages: 0
     });
 
     await this.userRepository.save(user);
@@ -124,16 +139,6 @@ export class DatabaseService {
     thread_title: string,
     tag: string[]
   ) : Promise<{ message: string }> {
-    // Find forum thread belong to
-    let forum = await this.findForum(forum_id);
-    if(forum === null) {
-      this.logger.debug("Attempting create a thread in an unexisted forum!");
-      throw new HttpException("Forum not found", HttpStatus.BAD_REQUEST);
-    }
-    // increase threads count and save
-    forum.threads++;
-    await this.forumRepository.save(forum);
-
     // Create a new Thread and save to database
     let create_time = new Date();
     const thread = this.threadRepository.create({ 
@@ -147,10 +152,21 @@ export class DatabaseService {
       replies: 0, 
       views: 0, 
       tag: tag,
+      reactions: [],
       delete: false
     });
-
     await this.threadRepository.save(thread);
+
+    // Find forum thread belong to
+    let forum = await this.findForum(forum_id);
+    if(forum === null) {
+      this.logger.debug("Attempting create a thread in an unexisted forum!");
+      throw new HttpException("Forum not found", HttpStatus.BAD_REQUEST);
+    }
+    // increase threads count and save
+    forum.threads++;
+    await this.forumRepository.save(forum);
+    
     this.logger.log("API Create new thread succeeded: " + thread_title);
     return {message: "success" };
   }
@@ -161,25 +177,6 @@ export class DatabaseService {
     email: string, 
     content: string
   ) : Promise<{ message: string }> {
-    // Find thread with id 'thread_id'
-    let thread = await this.findThread(thread_id);
-    if(thread === null) {
-      this.logger.log("Created new message failed: Thread not found")
-      throw new HttpException("Thread not found", HttpStatus.BAD_REQUEST);
-    }
-    // Increase replies count
-    thread.replies += 1;
-    await this.threadRepository.save(thread);
-
-    // Find forum thread belong to
-    let forum = await this.findForum(thread.forum_id);
-    if(forum === null) {
-      this.logger.debug("Thread belongs to unexisted forum");
-    }
-    // increase messages count and save
-    forum.messages++;
-    await this.forumRepository.save(forum);
-    
     // Create a new Message and save to database
     let create_time = new Date();
     const message = this.messageRepository.create({ 
@@ -187,10 +184,35 @@ export class DatabaseService {
       content,
       sender_email: email,
       send_time: create_time,
+      last_update_time: create_time,
+      reactions: [],
       delete: false
     });
-
     await this.messageRepository.save(message);
+
+    // Find thread with id 'thread_id'
+    let thread = await this.findThread(thread_id);
+    if(thread === null) {
+      this.logger.log("Created new message failed: Thread not found")
+      throw new HttpException("Thread not found", HttpStatus.BAD_REQUEST);
+    }
+
+    // Find forum thread belong to
+    let forum = await this.findForum(thread.forum_id);
+    if(forum === null) {
+      this.logger.debug("Thread belongs to unexisted forum");
+    }
+
+    // Increase replies count
+    thread.replies += 1;
+    // Change last message
+    thread.last_message_id = message.id;
+    await this.threadRepository.save(thread);
+    
+    // increase messages count and save
+    forum.messages++;
+    await this.forumRepository.save(forum);
+    
     this.logger.log("Created new message succeeded");
     return { message: "success" };
   }
@@ -224,6 +246,26 @@ export class DatabaseService {
     return result;
   }
 
+  // Find User profile associated with an email and return its public information
+  async findPublicUser(
+    email: string
+  ) : Promise<any | null> {
+    let user = await this.userRepository.findOne({
+      where: {
+        email: email
+      }
+    });
+    let userLogin = await this.loginRepository.findOne({
+      where: {
+        email: email
+      }
+    });
+    let {username, likes, messages } = user;
+    let {create_time} = userLogin;
+    this.logger.log("API Find user public profile succeeded: " + email);
+    return {username, email, likes, messages, create_time};
+  }
+
   // Find a forum with forum_id
   async findForum(
     forum_id: number
@@ -244,7 +286,7 @@ export class DatabaseService {
     let allForums = await this.forumRepository.find({
       where: {
         category: category
-      }
+      }, 
     });
     this.logger.log("API Find forums of a category succeeded: " + category);
     return allForums;
@@ -300,11 +342,12 @@ export class DatabaseService {
   async findAllThreadOfForum(
     forum_id: number
   ): Promise<Thread[] | null> {
-    let threads = await this.threadRepository.find({ 
-      where: {
-        forum_id: forum_id
-      }
-    });
+    let threads = await this.threadRepository
+    .createQueryBuilder()
+    .where("forum_id = :forum_id", {forum_id})
+    .take(1000)
+    .getMany();
+    
     this.logger.log("API Find threads of a forum succeeded: " + forum_id);
     return threads;
   }
@@ -313,13 +356,41 @@ export class DatabaseService {
   async findAllThreadOfUser(
     email: string
   ): Promise<Thread[] | null> {
-    let threads = await this.threadRepository.find({ 
-      where: {
-        author_email: email
-      }
-    });
+    let threads = await this.threadRepository
+    .createQueryBuilder()
+    .where("author_email = :email", {email})
+    .take(1000)
+    .getMany();
+
     this.logger.log("API Find threads of user succeeded: " + email);
     return threads;
+  }
+
+  // find lastest thread of a forum
+  // also return last message of that thread
+  async findLastestThread(
+    forum_id: number
+  ): Promise<[string, Date, string] | null> {
+    let thread;
+    try {
+      thread = await this.threadRepository
+      .createQueryBuilder()
+      .where("forum_id = :forum_id", {forum_id})
+      .orderBy("last_update_time", "DESC")
+      .getOneOrFail();
+    } catch(error) {
+      this.logger.debug(error);
+      return null;
+    }
+
+    // if no message found, return thread author
+    let result = await this.findLastestMessage(thread.id);
+    let threadAuthor = await this.findUser(thread.author_email);
+    if(result === null) { 
+      return [thread.thread_title, thread.last_update_time, threadAuthor.username];
+    }
+    this.logger.log("API Find lastest thread succeeded: " + JSON.stringify(thread));
+    return [thread.thread_title, result[1].last_update_time, result[0].username];
   }
 
   // find a message with id 'message_id'
@@ -339,25 +410,68 @@ export class DatabaseService {
   async findAllMessageOfThread(
     thread_id: number
   ): Promise<Message[] | null> {
-    let messages = await this.messageRepository.find({ 
-      where: {
-        thread_id: thread_id
-      }
-    });
+    let messages = await this.messageRepository
+    .createQueryBuilder()
+    .where("thread_id = :thread_id", {thread_id})
+    .take(1000)
+    .getMany();
+
     this.logger.log("API Find messages of a thread succeeded: " + thread_id);
     return messages;
   }
 
+  // Find messages of a thread with limit and offset
+  async findMessages(
+    thread_id: number,
+    limit: number,
+    offset: number
+  ): Promise<Message[] | null > {
+    let messages = await this.messageRepository
+    .createQueryBuilder()
+    .where("thread_id = :thread_id", {thread_id})
+    .orderBy("send_time", "DESC")
+    .skip(offset)
+    .take(limit)
+    .getMany();
+    return messages;
+  }
+
+  // find messages sent by a user
   async findAllMessageOfUser(
     email: string
   ) : Promise<Message[] | null> {
-    let messages = await this.messageRepository.find({
-      where: {
-        sender_email: email
-      }
-    });
+    let messages = await this.messageRepository
+    .createQueryBuilder()
+    .where("sender_email = :email", {email})
+    .take(1000).getMany();
+
     this.logger.log("API Find messages of user succeeded: " + email);
     return messages;
+  }
+  
+  // find lastest message and the sender of a thread
+  async findLastestMessage(
+    thread_id: number
+  ): Promise<[any, Message] | null> {
+    // find message
+    let message = await this.messageRepository
+    .createQueryBuilder()
+    .where("thread_id = :thread_id", {thread_id})
+    .orderBy("send_time", "DESC")
+    .getOne();
+
+    if(message === null) {
+      return null;
+    }
+
+    // find sender
+    let user = await this.userRepository
+    .createQueryBuilder()
+    .where("email = :email", {email: message.sender_email})
+    .getOne();
+
+    this.logger.log("API Find lastest message succeeded: " + JSON.stringify(message));
+    return [{username: user.username, email: user.email}, message];
   }
 
   // update password for an account
@@ -439,6 +553,14 @@ export class DatabaseService {
     await this.threadRepository.save(thread);
     this.logger.log("API Update thread succeeded: " + thread_id);
     return { message: "success" };
+  }
+
+  // update thread reaction
+  async updateThreadReaction(
+    thread_id: number,
+    reaction_type: number,
+  ) {
+    
   }
 
   // update a message

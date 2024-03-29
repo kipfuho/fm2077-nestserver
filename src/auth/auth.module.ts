@@ -19,7 +19,7 @@ import { SessionSerializer } from './session.serializer';
       useFactory: (configService: ConfigService) => ({
         global: true,
         secret: configService.get("JWT_SECRET"),
-        signOptions: { expiresIn: '600s' },
+        signOptions: { expiresIn: '10s' }, // 30m duration
       }),
       inject: [ConfigService]
     }),
@@ -32,7 +32,12 @@ import { SessionSerializer } from './session.serializer';
     AuthService, 
     LocalStrategy,
     JwtStrategy,
-    SessionSerializer
+    SessionSerializer,
+    {
+      provide: APP_GUARD,
+      useClass: JwtAuthGuard
+    }
   ]
 })
+
 export class AuthModule {}

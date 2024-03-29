@@ -5,6 +5,7 @@ import * as session from 'express-session';
 import * as passport from "passport"
 import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs';
+import * as cookieParser from 'cookie-parser';
 
 async function bootstrap() {
   const httpsOptions = {
@@ -17,8 +18,7 @@ async function bootstrap() {
   const configService = app.get(ConfigService);
   app.enableCors({
     credentials: true, 
-    origin: true,
-    allowedHeaders: ['Origin, X-Requested-With, Content-Type, Accept']
+    origin: "https://localhost:3000",
   });
   app.useGlobalPipes(new ValidationPipe());
   app.use(
@@ -36,6 +36,7 @@ async function bootstrap() {
   );
   app.use(passport.initialize())
   app.use(passport.session())
+  app.use(cookieParser());
 
   await app.listen(3001);
 }

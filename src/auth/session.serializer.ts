@@ -1,4 +1,8 @@
-import { Injectable, Logger, UnauthorizedException } from "@nestjs/common"
+import { 
+  Injectable, 
+  Logger, 
+  UnauthorizedException 
+} from "@nestjs/common"
 import { PassportSerializer } from "@nestjs/passport"
 
 @Injectable()

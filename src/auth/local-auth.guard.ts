@@ -1,7 +1,11 @@
-import { ExecutionContext, Injectable, Logger } from '@nestjs/common';
+import { 
+	ExecutionContext, 
+	Injectable, 
+	Logger 
+} from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 
-// this strategy i used for login only
+// this strategy is used for checking account in database
 @Injectable()
 export class LocalAuthGuard extends AuthGuard('local') {
 	private readonly logger = new Logger(LocalAuthGuard.name);

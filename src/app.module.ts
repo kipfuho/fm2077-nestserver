@@ -5,12 +5,14 @@ import { AuthModule } from './auth/auth.module';
 import { UserModule } from './user/user.module';
 import { ModeratorModule } from './moderator/moderator.module';
 import { ConfigModule } from '@nestjs/config';
+import { DatabaseModule } from './database/db.module';
 
 @Module({
   imports: [
     AuthModule, 
     UserModule, 
     ModeratorModule,
+    DatabaseModule,
     ConfigModule.forRoot({
       isGlobal: true
     })

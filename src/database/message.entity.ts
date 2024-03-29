@@ -21,6 +21,9 @@ export class Message {
   @Column("varchar", { length: 10000 })
   content: string;
 
+  @Column("simple-array")
+  reactions: number[];
+
   @Column()
   last_update_time: Date;
 
