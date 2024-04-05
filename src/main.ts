@@ -6,6 +6,9 @@ import * as passport from "passport"
 import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs';
 import * as cookieParser from 'cookie-parser';
+import * as MySQLStore from 'express-mysql-session';
+import RedisStore from 'connect-redis';
+import { createClient } from 'redis';
 
 async function bootstrap() {
   const httpsOptions = {
@@ -16,28 +19,44 @@ async function bootstrap() {
     httpsOptions
   });
   const configService = app.get(ConfigService);
+  const mysqlSessionStore = new (MySQLStore(session))({
+    host: 'localhost',
+    port: 3306,
+    user: configService.get('DATABASE_USER'),
+    password: configService.get('DATABASE_PASSWORD'),
+    database: configService.get('SESSION_DATABASE_NAME'),
+    clearExpired: true,
+    checkExpirationInterval: 86400000, // 1 day
+    expiration: 365*86400000, // 365 days
+  });
+
+  const redisClient = createClient();
+  redisClient.connect().catch((console.error));
+  const redisStore = new RedisStore({
+    client: redisClient,
+    ttl: 3600000 // 1 hour,
+  });
+
   app.enableCors({
     credentials: true, 
     origin: "https://localhost:3000",
   });
   app.useGlobalPipes(new ValidationPipe());
-  app.use(
-    session({
-      secret: "123312",
-      resave: false,
-      saveUninitialized: false,
-      // we can add cookie: { secure: true } to make it more secure
-      // but https only
-      cookie: {
-        sameSite: "none",
-        secure: true,
-      }
-    }),
-  );
+  app.use(session({
+    store: redisStore, // use redis as session store
+    //store: mysqlSessionStore, // use mysql as session store
+    secret: configService.get("SESSION_SECRET"),
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      sameSite: "none",
+      secure: true,
+    }
+  }));
   app.use(passport.initialize())
   app.use(passport.session())
   app.use(cookieParser());
-
+  
   await app.listen(3001);
 }
 bootstrap();

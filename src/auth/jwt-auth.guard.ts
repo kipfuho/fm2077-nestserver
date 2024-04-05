@@ -2,6 +2,7 @@ import {
   ExecutionContext, 
   HttpException, 
   HttpStatus, 
+  Inject, 
   Injectable, 
   Logger, 
   UnauthorizedException 
@@ -11,13 +12,16 @@ import { AuthGuard } from '@nestjs/passport';
 import { IS_PUBLIC_KEY } from './public';
 import { JwtService } from '@nestjs/jwt';
 import { AuthService } from './auth.service';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { RedisCache } from 'cache-manager-redis-yet';
 
 @Injectable()
 export class JwtAuthGuard extends AuthGuard('jwt') {
 	constructor(
     private readonly authService: AuthService,
     private readonly reflector: Reflector,
-    private readonly jwtService: JwtService
+    private readonly jwtService: JwtService,
+    @Inject(CACHE_MANAGER) private readonly cacheManager: RedisCache
   ) {
     super();
   }
@@ -43,6 +47,20 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
       this.logger.debug("Request is not authenticated " + request.url);
       return false;
     }
+    // get session cache from redis and compare with request refresh token
+    // check if session is consistent
+    const sessionCache: string = await this.cacheManager.get(`login:${request.user.id}:token`);
+    if(!sessionCache) {
+      this.logger.debug("Session exist in request but not in redis");
+      this.cacheManager.del(`user:${request.user.id}`);
+      request.session.destroy();
+      throw new HttpException("Session error", HttpStatus.BAD_REQUEST);
+    }
+    if(sessionCache !== request.user.refreshToken) {
+      // this mean someone else has logged into the same account
+      request.session.destroy();
+      throw new HttpException("Someone has logged into your account", HttpStatus.FORBIDDEN);
+    }
     
     // activate jwt through strategy
     // catch error is probably due to expired token
@@ -55,21 +73,23 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
       }
     } catch(error) {
       this.logger.debug("JWT: ", error);
-      // get refresh token data
-      const refresh_token_data = this.authService.decryptRefreshToken(request.cookies.refresh_token);
-      // if the data in the session storage does not match the data from refresh token
-      // throw unauthorized
-      if(request.user.username != refresh_token_data.username || request.user.email != refresh_token_data.email) {
+      // check refresh token from request and session store
+      // if equal, provide new jwt token
+      // else destroy sesion
+      if(request.user.refreshToken !== request.cookies.refresh_token) {
         this.logger.debug("Refresh token error!");
-        throw new HttpException("Refresh token error", HttpStatus.UNAUTHORIZED);
-      } else {
-        // check if the refresh token is expired, if it is create a new one
-        if(refresh_token_data.exp < new Date().getTime()) {
-          this.logger.debug("Renew Refresh token");
-          response.cookie('refresh_token', this.authService.encryptRefreshToken(request.user));
-        }
+        request.session.destroy();
+        throw new HttpException("Refresh token error, destroying session", HttpStatus.UNAUTHORIZED);
       }
+      // create new token and attach to response
+      const newRefreshToken = this.authService.encryptRefreshToken({username: request.user.username, email: request.user.email});
+      response.cookie('refresh_token', newRefreshToken);
       response.cookie('jwt', this.jwtService.sign(request.user));
+      // save session
+      request.session.passport.user.refreshToken = newRefreshToken;
+      request.session.save();
+      // save cache
+      await this.cacheManager.set(`login:${request.user.id}:token`, newRefreshToken);
       return true;
     }
   }

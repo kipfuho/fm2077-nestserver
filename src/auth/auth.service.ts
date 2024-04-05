@@ -1,7 +1,6 @@
-import { 
+import {
 	Injectable, 
-	Logger, 
-	UnauthorizedException 
+	Logger
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AES, enc } from 'crypto-js';
@@ -19,17 +18,17 @@ export class AuthService {
 	// validate user for local strategy
 	// return user login information
 	async validateUser(username: string, pass: string): Promise<any> {
-    const user = await this.dbService.findUserLogin(username, username);
-    if (user && user.password === pass) {
-			// create payload for jwt token and return it
-			this.logger.log("Logged in: " + user.email);
+    const loginData = await this.dbService.findUserLogin(username, username);
+    if (loginData && loginData.login.password === pass) {
+			const {create_time, password, ...payload} = loginData.login;
+			this.logger.log("Logged in: " + loginData.login.email);
 			const userSessionData = { 
-				username: user.username, 
-				email: user.email
+				...payload,
+				refreshToken: this.encryptRefreshToken(payload)
 			};
 			return userSessionData;
     }
-		this.logger.log("Wrong password: " + user.email);
+		this.logger.debug("Username or password is wrong: " + username);
     return null;
   }
 
@@ -37,9 +36,10 @@ export class AuthService {
 	encryptRefreshToken(user: any): string {
 		this.logger.log("Encrypting Refresh token");
 		const refreshTokenData = {
+			id: user.id,
 			username: user.username, 
 			email: user.email,
-			exp: new Date().getTime() + 10*1000 // 10 seconds
+			exp: new Date().getTime() + 3*30*24*60*60*1000 // 3 months
 		};
 		// encrypt data using key and iv from .env and convert it to hex string
 		const encrypted = AES.encrypt(JSON.stringify(refreshTokenData), this.configService.get("AES_KEY"), {iv: this.configService.get("AES_IV")});

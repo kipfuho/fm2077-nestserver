@@ -23,4 +23,10 @@ export class Forum {
 
   @Column()
   messages: number;
+
+  @Column()
+  delete: boolean;
+
+  @Column()
+  privilege: number;
 }

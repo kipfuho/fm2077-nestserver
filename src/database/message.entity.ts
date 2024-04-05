@@ -13,7 +13,7 @@ export class Message {
   thread_id: number;
 
   @Column()
-  sender_email: string;
+  user_id: number;
 
   @Column()
   send_time: Date;

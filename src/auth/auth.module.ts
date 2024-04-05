@@ -10,6 +10,9 @@ import { LocalStrategy } from './local.strategy';
 import { JwtStrategy } from './jwt.strategy';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { SessionSerializer } from './session.serializer';
+import { CacheModule } from '@nestjs/cache-manager';
+import { RedisClientOptions } from 'redis';
+import { redisStore } from 'cache-manager-redis-yet';
 
 @Module({
   imports: [
@@ -26,6 +29,17 @@ import { SessionSerializer } from './session.serializer';
     PassportModule.register({
       session: true,
     }),
+    CacheModule.registerAsync<RedisClientOptions>({
+			useFactory: async () => ({
+				store: await redisStore({
+					socket: {
+						host: 'localhost',
+						port: 6379
+					},
+					ttl: 365*86400*1000 // miliseconds
+				})
+			})
+    }),
   ],
   controllers: [AuthController],
   providers: [
@@ -37,7 +51,8 @@ import { SessionSerializer } from './session.serializer';
       provide: APP_GUARD,
       useClass: JwtAuthGuard
     }
-  ]
+  ],
+  exports: [AuthService, JwtModule]
 })
 
 export class AuthModule {}

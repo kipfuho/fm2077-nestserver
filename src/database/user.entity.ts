@@ -16,9 +16,6 @@ export class User {
   username: string;
 
   @Column()
-  password: string;
-
-  @Column()
   messages: number;
 
   @Column()
@@ -41,4 +38,7 @@ export class User {
 
   @Column()
   twofa: boolean;
+
+  @Column()
+  class: number;
 }

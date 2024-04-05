@@ -13,16 +13,13 @@ export class Thread {
   forum_id: number;
 
   @Column()
-  author_email: string;
+  user_id: number;
 
   @Column()
   thread_title: string;
 
   @Column("simple-array")
   tag: string[];
-
-  @Column("varchar", { length: 10000 })
-  content: string;
 
   @Column()
   create_time: Date;
@@ -36,12 +33,9 @@ export class Thread {
   @Column()
   views: number;
 
-  @Column("simple-array")
-  reactions: number[];
-
-  @Column()
-  last_message_id: number;
-
   @Column()
   delete: boolean;
+
+  @Column()
+  privilege: number;
 }
