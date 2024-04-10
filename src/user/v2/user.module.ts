@@ -1,27 +1,16 @@
 import { Module } from '@nestjs/common';
-import { AppService } from './app.service';
-import { AuthModule } from './auth/auth.module';
-import { UserModuleV1 } from './user/v1/user.module';
-import { ModeratorModule } from './moderator/moderator.module';
-import { ConfigModule, ConfigService } from '@nestjs/config';
-import { DatabaseModule } from './database/db.module';
+import { AuthModule } from 'src/auth/auth.module';
 import { CacheModule } from '@nestjs/cache-manager';
 import { RedisClientOptions } from 'redis';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { redisStore } from 'cache-manager-redis-yet';
-import { MongodbModule } from './mongodb/mongodb.module';
-import { UserModuleV2 } from './user/v2/user.module';
+import { UserControllerV2 } from './user.controller';
+import { MongodbModule } from 'src/mongodb/mongodb.module';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({
-      isGlobal: true
-    }),
-    AuthModule, 
-    UserModuleV1, 
-    UserModuleV2,
-    ModeratorModule,
-    DatabaseModule,
     MongodbModule,
+		AuthModule,
     CacheModule.registerAsync<RedisClientOptions>({
       imports: [ConfigModule],
 			useFactory: async (configService: ConfigService) => ({
@@ -37,6 +26,6 @@ import { UserModuleV2 } from './user/v2/user.module';
       inject: [ConfigService],
     }),
   ],
-  providers: [AppService]
+  controllers: [UserControllerV2],
 })
-export class AppModule { }
+export class UserModuleV2 {}

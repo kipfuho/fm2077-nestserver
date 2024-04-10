@@ -2,15 +2,17 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { DatabaseService } from './db.service';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { Login } from './login.entity';
-import { User } from './user.entity';
-import { Forum } from './forum.entity';
-import { Message } from './message.entity';
-import { Thread } from './thread.entity';
+import { Login } from './entity/login.entity';
+import { User } from './entity/user.entity';
+import { Forum } from './entity/forum.entity';
+import { Message } from './entity/message.entity';
+import { Thread } from './entity/thread.entity';
 import { DataSource } from 'typeorm';
 import { CacheModule } from '@nestjs/cache-manager';
 import { RedisClientOptions } from 'redis';
 import { redisStore } from 'cache-manager-redis-yet';
+import { Category } from './entity/category.entity';
+import { Reaction } from './entity/reaction.entity';
 
 @Module({
   imports: [
@@ -20,15 +22,17 @@ import { redisStore } from 'cache-manager-redis-yet';
         type: 'mysql',
         host: 'localhost',
         port: 3306,
-        username: configService.get('DATABASE_USER'),
-        password: configService.get('DATABASE_PASSWORD'),
+        username: configService.get('DATABASE_MYSQL_LOCAL_USER'),
+        password: configService.get('DATABASE_MYSQL_LOCAL_PASSWORD'),
         database: configService.get('DATABASE_NAME'),
         entities: [
           Login, 
           User, 
+          Category,
           Forum, 
           Message, 
-          Thread
+          Thread,
+          Reaction
         ],
         synchronize: true,
       }),
@@ -41,20 +45,25 @@ import { redisStore } from 'cache-manager-redis-yet';
     TypeOrmModule.forFeature([
       Login, 
       User, 
+      Category,
       Forum, 
       Message, 
-      Thread
+      Thread,
+      Reaction
     ]),
     CacheModule.registerAsync<RedisClientOptions>({
-			useFactory: async () => ({
+      imports: [ConfigModule],
+			useFactory: async (configService: ConfigService) => ({
 				store: await redisStore({
 					socket: {
-						host: 'localhost',
-						port: 6379
+						host: configService.get("REDIS_HOST"),
+						port: configService.get("REDIS_PORT")
 					},
-					ttl: 60*60*1000 // 1 hour
+          password: configService.get("REDIS_PASSWORD"),
+					ttl: 60*1000 // 1 minute
 				})
-			})
+			}),
+      inject: [ConfigService],
     }),
   ],
   providers: [DatabaseService],

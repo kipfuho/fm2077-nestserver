@@ -10,7 +10,7 @@ export class Forum {
   id: number;
 
   @Column()
-  category: string;
+  category_id: number;
 
   @Column()
   forum_name: string;

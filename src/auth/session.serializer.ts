@@ -1,7 +1,6 @@
 import { 
   Injectable, 
-  Logger, 
-  UnauthorizedException 
+  Logger
 } from "@nestjs/common"
 import { PassportSerializer } from "@nestjs/passport"
 
