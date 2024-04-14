@@ -1,9 +1,10 @@
-import { Controller, Get, HttpCode, HttpException, HttpStatus, Query, Req } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpException, HttpStatus, Post, Query, Req } from '@nestjs/common';
 import { MongodbService } from './mongodb.service';
 import { Public } from 'src/auth/public';
 import { enc, SHA256 } from 'crypto-js';
-import { Types } from 'mongoose';
 import { TagDocument } from './schema/tag.schema';
+import { ForumDocument } from './schema/forum.schema';
+import { CategoryDocument } from './schema/category.schema';
 
 @Controller('mongodb')
 export class MongodbController {
@@ -85,6 +86,20 @@ export class MongodbController {
 
 	@HttpCode(HttpStatus.OK)
 	@Public()
+	@Post("category/create-all")
+	async createAllCategory(@Body() body: {
+		count: number,
+		detail: [{name: string, title: string, about: string}]
+	}) {
+		let categoryIds: string[] = [];
+		for(let i = 0; i < body.count; i++) {
+			categoryIds.push((await this.mongodbService.createCategory(body.detail[i].name, body.detail[i].title, body.detail[i].about))._id.toHexString());
+		}
+		return categoryIds;
+	}
+
+	@HttpCode(HttpStatus.OK)
+	@Public()
 	@Get("category/get")
 	async getCategory(@Query("categoryId") categoryId: string) {
 		const category = await this.mongodbService.findCategoryById(categoryId);
@@ -103,6 +118,21 @@ export class MongodbController {
 			throw new HttpException("Failed", HttpStatus.NOT_MODIFIED);
 		}
 		return category;
+	}
+
+	@HttpCode(HttpStatus.OK)
+	@Public()
+	@Post("category/add-forum-many")
+	async addForumToCategory2(@Body() body: {
+		detail: [{categoryId: string, forumId: string[]}]
+	}) {
+		let categories: CategoryDocument[] = [];
+		for(let i = 0; i < body.detail.length; i++) {
+			for(let j = 0; j < body.detail[i].forumId.length; j++) {
+				categories.push(await this.mongodbService.addForumToCategory(body.detail[i].categoryId, body.detail[i].forumId[j]));
+			}
+		}
+		return categories;
 	}
 
 
@@ -127,6 +157,20 @@ export class MongodbController {
 		}
 		return forum;
 	}
+	
+	@HttpCode(HttpStatus.OK)
+	@Public()
+	@Post("forum/create-all")
+	async createAllForum(@Body() body: {
+		count: number,
+		detail: [{name: string, about: string}]
+	}) {
+		let forumIds: string[] = [];
+		for(let i = 0; i < body.count; i++) {
+			forumIds.push((await this.mongodbService.createForum(body.detail[i].name, body.detail[i].about))._id.toHexString());
+		}
+		return forumIds;
+	}
 
 	@HttpCode(HttpStatus.OK)
 	@Public()
@@ -138,6 +182,7 @@ export class MongodbController {
 		}
 		return forum.forum;
 	}
+
 	
 
 
@@ -162,6 +207,18 @@ export class MongodbController {
 			throw new HttpException("Failed", HttpStatus.NOT_MODIFIED);
 		}
 		return thread;
+	}
+
+	@HttpCode(HttpStatus.CREATED)
+	@Public()
+	@Post("thread/create")
+	async createThread2(@Body() body) {
+		const thread = await this.mongodbService.createThread(body.forumId, body.userId, body.title, body.tag);
+		if(!thread) {
+			throw new HttpException("Failed", HttpStatus.NOT_MODIFIED);
+		}
+		const message = await this.mongodbService.createMessage(thread._id.toHexString(), body.userId, body.threadContent);
+		return {thread, message};
 	}
 
 	@HttpCode(HttpStatus.OK)

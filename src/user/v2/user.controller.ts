@@ -30,7 +30,10 @@ import { Public } from "src/auth/public";
 import { CreateUserDto } from "src/interface/create.dto";
 import { MongodbService } from "src/mongodb/mongodb.service";
 import { getFileType } from "src/utils/helper";
-import { CreateThread } from "./type.dto";
+import { CreateThread, UpdateMessage, UpdateThread } from "./type.dto";
+import { SHA256 } from "crypto-js";
+import { Readable } from "stream";
+import { createHash } from "crypto";
 
 @Controller("v2")
 export class UserControllerV2 {
@@ -191,7 +194,7 @@ export class UserControllerV2 {
   @Post('/login')
   async login(@Req() req: any, @Res({passthrough: true}) res: any) {
 		// save session to redis
-		await this.cacheManager.set(`login:${req.user.id}:token`, req.user.refreshToken);
+		await this.cacheManager.set(`login:${req.user.id}:token`, req.user.refreshToken, 86400000);
 		// attach access_token and refresh_token as cookie
 		res.cookie('jwt', req.session.passport.user.jwt);
 		res.cookie('refresh_token', req.session.passport.user.refreshToken);
@@ -251,11 +254,26 @@ export class UserControllerV2 {
 	}
 
 	@HttpCode(HttpStatus.OK)
+	@Public()
+	@Post("user/get")
+	async getUser2(@Body() body) {
+		const result = await this.mongodbService.findUserById(body.userId);
+		if(!result || !result.user) {
+			throw new HttpException("User not found", HttpStatus.NOT_FOUND);
+		}
+		if(result.cache) {
+			const { email, password, setting, ...nonSensitive } = result.user;
+			return nonSensitive;
+		} else {
+			const { email, password, setting, ...nonSensitive } = result.user.toObject();
+			return nonSensitive;
+		}
+	}
+
+	@HttpCode(HttpStatus.OK)
 	@Get("user/get-current")
 	async getCurrentUser(@Req() req) {
 		const result = await this.mongodbService.findUserById(req.user.id);
-		console.log(req.user);
-		console.log(req.session);
 		if(!result || !result.user) {
 			throw new HttpException("User not found", HttpStatus.NOT_FOUND);
 		}
@@ -268,6 +286,7 @@ export class UserControllerV2 {
 		}
 	}
 
+	
 
 
 
@@ -363,7 +382,14 @@ export class UserControllerV2 {
 	@HttpCode(HttpStatus.OK)
 	@Public()
 	@Get("thread/get")
-	async getThreads(@Query("forumId") forumId: string, @Query("offset") offset: number, @Query("limit") limit: number) {
+	async getThreads(@Query("forumId") forumId: string, @Query("offset") offset: number, @Query("limit") limit: number, @Query("threadId") threadId: string) {
+		if(threadId) {
+			const result = await this.mongodbService.findThreadById(threadId);
+			if(!result || !result.thread) {
+				throw new HttpException("Thread not found", HttpStatus.NOT_FOUND);
+			}
+			return result.thread;
+		}
 		const threads = await this.mongodbService.findThread(forumId, offset, limit);
 		if(!threads) {
 			throw new HttpException("Threads not found", HttpStatus.NOT_FOUND);
@@ -376,7 +402,6 @@ export class UserControllerV2 {
 	@Get("thread/get-lastest")
 	async getLastestThread(@Query("forumId") forumId: string) {
 		const thread = await this.mongodbService.findLastestThread(forumId);
-		console.log(!null);
 		if(!thread) {
 			throw new HttpException("Thread not found", HttpStatus.NOT_FOUND);
 		}
@@ -403,6 +428,19 @@ export class UserControllerV2 {
 		}
 		const message = await this.mongodbService.createMessage(thread._id.toHexString(), body.userId, body.threadContent);
 		return {thread, message};
+	}
+
+	@HttpCode(HttpStatus.OK)
+	@Post("/thread/update")
+	async updateThread(@Req() req, @Body() body: UpdateThread){
+		if(req.user.id !== body.userId) {
+			throw new HttpException("User not match", HttpStatus.BAD_REQUEST);
+		}
+		const result = await this.mongodbService.editThread(body.threadId, body.threadPrefix, body.threadTitle, body.threadContent, body.tag);
+		if(!result) {
+			throw new HttpException("Error updating", HttpStatus.BAD_REQUEST);
+		}
+		return result;
 	}
 
 
@@ -439,12 +477,34 @@ export class UserControllerV2 {
 		}
 	}
 
+	@HttpCode(HttpStatus.OK)
+	@Post("/message/update")
+	async updateMessage(@Req() req, @Body() body: UpdateMessage){
+		if(req.user.id !== body.userId) {
+			throw new HttpException("User not match", HttpStatus.BAD_REQUEST);
+		}
+		const result = await this.mongodbService.editMessage(body.messageId, body.content);
+		if(!result) {
+			throw new HttpException("Error updating", HttpStatus.BAD_REQUEST);
+		}
+		return result;
+	}
 
-
-
-
-
-
-
-
+	@HttpCode(HttpStatus.OK)
+	@Public()
+	@Get("message/get")
+	async getMessage(@Query("threadId") threadId: string, @Query("offset") offset: number, @Query("limit") limit: number, @Query("messageId") messageId: string) {
+		if(messageId) {
+			const message = await this.mongodbService.findMessageById(messageId);
+			if(!message) {
+				throw new HttpException("Message not found", HttpStatus.NOT_FOUND);
+			}
+			return message;
+		}
+		const messages = await this.mongodbService.findMessage(threadId, offset, limit);
+		if(!messages) {
+			throw new HttpException("Messages not found", HttpStatus.NOT_FOUND);
+		}
+		return messages;
+	}
 }

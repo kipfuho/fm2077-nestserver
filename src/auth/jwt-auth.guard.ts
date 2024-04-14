@@ -88,7 +88,7 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
         request.session.passport.user.refreshToken = newRefreshToken;
         request.session.save();
         // save cache
-        await this.cacheManager.set(`login:${request.user.id}:token`, newRefreshToken);
+        await this.cacheManager.set(`login:${request.user.id}:token`, newRefreshToken, 86400*1000);
         return true;
       }
     }

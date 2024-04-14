@@ -16,7 +16,6 @@ import { MongodbModule } from 'src/mongodb/mongodb.module';
 
 @Module({
   imports: [
-    DatabaseModule,
     MongodbModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],

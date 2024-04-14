@@ -18,8 +18,19 @@ export class Forum {
 	@Prop()
 	delete: boolean;
 	
-	@Prop()
-	privilege: number;
+	@Prop({type: {
+		view: {type: Number},
+		reply: {type: Number},
+		upload: {type: Number},
+		delete: {type: Number},
+		_id: false
+	}})
+	privilege: {
+		view: number;
+		reply: number;
+		upload: number;
+		delete: number;
+	};
 };
 
 export type ForumDocument = HydratedDocument<Forum>;

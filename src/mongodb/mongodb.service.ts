@@ -223,7 +223,7 @@ export class MongodbService {
 				return null;
 			}
 			this.logger.log(`Added forum:${forumId} to category:${categoryId}`);
-			return await this.categoryModel.findByIdAndUpdate(categoryId, {$push: {forums: forumData.forum}}, {new: true}).exec();
+			return await this.categoryModel.findByIdAndUpdate(categoryId, {$push: {forums: forumId}}, {new: true}).exec();
 		} catch(err) {
 			this.logger.error(err);
 			return null;
@@ -268,7 +268,12 @@ export class MongodbService {
 				threads: 0,
 				messages: 0,
 				delete: false,
-				privilege: 1,
+				privilege: {
+					view: 1,
+					reply: 1,
+					upload: 1,
+					delete: 3
+				},
 			});
 			this.logger.log(`Created a new forum, id=${forum._id.toHexString()}`);
 			return forum;
@@ -287,10 +292,9 @@ export class MongodbService {
 				return {cache: true, forum: cache};
 			}
 
-			console.log(forumId);
 			const forum = await this.forumModel.findById(forumId).exec();
 			if(forum) {
-				await this.cacheManager.set(`forum:${forumId}`, forum.toObject(), this.CACHE_TIME);
+				await this.cacheManager.set(`forum:${forumId}`, forum, this.CACHE_TIME);
 			}
 			this.logger.log(`DB:::Found forum:${forum}`);
 			return {cache: false, forum: forum};
@@ -346,9 +350,12 @@ export class MongodbService {
 				replies: 0,
 				views: 0,
 				delete: false,
-				privilege: 1
+				privilege: forumData.forum.privilege
 			});
-			await this.forumModel.updateOne({_id: forumId}, {$inc: {threads: 1}});
+			const forum = await this.forumModel.findByIdAndUpdate(forumId, {$inc: {threads: 1}}, {new: true}).exec();
+			if(forumData.cache) {
+				this.cacheManager.set(`forum:${forumId}`, forum);
+			}
 			this.logger.log(`Created a new thread, id=${thread._id.toHexString()}`);
 			return thread;
 		} catch(err) {
@@ -447,6 +454,20 @@ export class MongodbService {
 		return await this.threadModel.find().exec();
 	}
 
+	async editThread(threadId: string, threadPrefix: string = "", threadTitle: string, threadContent: string, tag: Tag[]): Promise<ThreadDocument> {
+		try {
+			const time = new Date();
+			const thread = await this.threadModel.findByIdAndUpdate(threadId, {title: threadTitle, update_time: time, tag: tag}, {new: true}).exec();
+			if(threadContent) {
+				await this.messageModel.updateOne({thread: threadId}, {content: threadContent, update_time: time}).exec();
+			}
+			this.logger.log(`Updated thread, id=${threadId}`);
+			return thread;
+		} catch(err) {
+			this.logger.error(err);
+			return null;
+		}
+	}
 
 
 
@@ -494,8 +515,11 @@ export class MongodbService {
 				},
 				delete: false
 			});
-			this.forumModel.updateOne({_id: threadData.thread._id}, {$inc: {messages: 1}});
-			this.threadModel.updateOne({_id: threadId}, {$inc: {replies: 1}});
+			await Promise.all([
+				this.forumModel.updateOne({_id: threadData.thread.forum}, {$inc: {messages: 1}}), 
+				this.threadModel.updateOne({_id: threadId}, {$inc: {replies: 1}}),
+				this.userModel.updateOne({_id: userData.user._id}, {$inc: {messages: 1}})
+			]);
 			this.logger.log(`Created new message, id=${message._id.toHexString()}`);
 			return message;
 		} catch(err) {
@@ -527,18 +551,64 @@ export class MongodbService {
 
 	async addReactionToMessage(messageId: string,  userId: string, type: string): Promise<ReactionDocument> {
 		try {
-			const [messageData, userData] = await Promise.all([this.findMessageById(messageId), this.findUserById(userId)]);
+			const [messageData, userData, reaction] = await Promise.all([
+				this.findMessageById(messageId), 
+				this.findUserById(userId),
+				this.reactionModel.findOne({message: messageId, user: userId}).exec()
+			]);
 			if(!messageData || !messageData.message || !userData || !userData.user) {
 				this.logger.log("User or message not found");
 				return null;
 			}
-			const reaction = await this.createReaction(messageId, userId, type);
+			if(reaction) {
+				this.logger.log("Duplicate reaction on a message");
+				return null;
+			}
+
+			const newReaction = await this.createReaction(messageId, userId, type);
 			this.logger.log(`Added a ${type} by user:${userId} to message:${messageId}`);
-			await Promise.all([
-				this.messageModel.findByIdAndUpdate(messageId, {$push: {[`reactions.${type}`]: reaction._id.toHexString()}}, {new: true}).exec(), 
-				this.userModel.updateOne({_id: messageData.message.user}, {$inc: {likes: 1}})
+			const [newMessage, newUser] = await Promise.all([
+				this.messageModel.findByIdAndUpdate(messageId, {$push: {[`reactions.${type}`]: newReaction._id.toHexString()}}, {new: true}).exec(), 
+				this.userModel.updateOne({_id: messageData.message.user}, {$inc: {likes: 1}}).exec()
 			]);
+			await Promise.all([
+				this.cacheManager.set(`message:${messageId}`, newMessage, this.CACHE_TIME),
+				this.cacheManager.set(`user:${messageData.message.user}`, newUser)
+			]);
+			if(userData.cache)
 			return reaction;
+		} catch(err) {
+			this.logger.error(err);
+			return null;
+		}
+	}
+
+	async removeReactionOfMessage(messageId: string,  userId: string, type: string): Promise<{message: MessageDocument, user: UserDocument}> {
+		try {
+			const [messageData, userData, reaction] = await Promise.all([
+				this.findMessageById(messageId), 
+				this.findUserById(userId),
+				this.reactionModel.findOne({message: messageId, user: userId}).exec()
+			]);
+			if(!messageData || !messageData.message || !userData || !userData.user) {
+				this.logger.log("Message or User not found");
+				return null;
+			}
+			if(!reaction) {
+				this.logger.log("Reaction not found");
+				return null;
+			}
+
+			const [message, user, _] = await Promise.all([
+				this.messageModel.findByIdAndUpdate(messageId, {$pull: {reactions: reaction._id.toHexString()}}, {new: true}).exec(),
+				this.userModel.findByIdAndUpdate(messageData.message.user, {$inc: {likes: -1}}, {new: true}).exec(),
+				this.reactionModel.deleteOne({_id: reaction._id}).exec()
+			]);
+			await Promise.all([
+				this.cacheManager.set(`message:${messageId}`, message, this.CACHE_TIME),
+				this.cacheManager.set(`user:${messageData.message.user}`, user, this.CACHE_TIME)
+			]);
+			return {message, user};
 		} catch(err) {
 			this.logger.error(err);
 			return null;
@@ -571,7 +641,16 @@ export class MongodbService {
 		}
 	}
 
-
+	async editMessage(messageId: string, content: string): Promise<MessageDocument> {
+		try {
+			const message = this.messageModel.findByIdAndUpdate(messageId, {content: content}, {new: true}).exec();
+			this.logger.log(`Updated message, id=${messageId}`);
+			return message;
+		} catch(err) {
+			this.logger.error(err);
+			return null;
+		}
+	}
 
 
 
@@ -671,6 +750,7 @@ export class MongodbService {
 				create_time: time
 			});
 			this.logger.log(`Created new reaction, id=${reaction._id.toHexString()}`);
+			return reaction;
 		} catch(err) {
 			this.logger.error(err);
 			return null;

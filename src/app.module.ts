@@ -17,10 +17,8 @@ import { UserModuleV2 } from './user/v2/user.module';
       isGlobal: true
     }),
     AuthModule, 
-    UserModuleV1, 
     UserModuleV2,
     ModeratorModule,
-    DatabaseModule,
     MongodbModule,
     CacheModule.registerAsync<RedisClientOptions>({
       imports: [ConfigModule],

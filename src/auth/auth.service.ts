@@ -5,13 +5,11 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { AES, enc } from 'crypto-js';
-import { DatabaseService } from 'src/database/db.service';
 import { MongodbService } from 'src/mongodb/mongodb.service';
 
 @Injectable()
 export class AuthService {
 	constructor(
-		private readonly dbService: DatabaseService,
 		private readonly mongodbService: MongodbService,
 		private readonly configService: ConfigService,
 		private readonly jwtService: JwtService,

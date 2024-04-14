@@ -16,3 +16,31 @@ export class CreateThread {
 
 	tag: Tag[];
 }
+
+export class UpdateThread {
+	@IsString()
+	threadId: string;
+	
+	@IsString()
+	userId: string;
+	
+	threadPrefix: string;
+
+	@IsString()
+	threadTitle: string;
+
+	threadContent: string;
+
+	tag: Tag[];
+}
+
+export class UpdateMessage {
+	@IsString()
+	messageId: string;
+
+	@IsString()
+	userId: string;
+
+	@IsString()
+	content: string;
+}

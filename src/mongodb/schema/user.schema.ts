@@ -42,7 +42,7 @@ export class User {
 		location: string;
 		website: string;
 		about: string;
-		twofa: boolean,
+		twofa: boolean;
 	};
 }
 
