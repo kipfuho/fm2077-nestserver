@@ -44,3 +44,43 @@ export class UpdateMessage {
 	@IsString()
 	content: string;
 }
+
+export class UpdateUsername {
+	@IsString()
+	userId: string;
+
+	@IsString()
+	username: string;
+}
+
+export class UpdateEmail {
+	@IsString()
+	userId: string;
+
+	@IsString()
+	email: string;
+}
+
+export class UpdatePassword {
+	@IsString()
+	userId: string;
+
+	@IsString()
+	oldPassword: string;
+
+	@IsString()
+	password: string;
+}
+
+export class UpdateSetting {
+	@IsString()
+	userId: string;
+
+	avatar: string;
+
+	dob: Date;
+
+	location: string;
+
+	about: string;
+}

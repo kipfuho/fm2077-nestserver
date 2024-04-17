@@ -145,6 +145,96 @@ export class MongodbService {
 		return await this.userModel.find().exec();
 	}
 
+	async editUsernameUser(userId: string, username: string): Promise<UserDocument> {
+		try {
+			const userData = await this.findUserById(userId);
+			if(!userData || !userData.user) {
+				this.logger.log("User not found");
+				return null;
+			}
+			const updatedUser = await this.userModel.findByIdAndUpdate(userId, {$set: {username: username}}, {new: true}).exec();
+			if(userData.cache) {
+				this.cacheManager.set(`user:${userId}`, updatedUser, this.CACHE_TIME);
+			}
+			this.logger.log(`Updated username of user:${userId}`);
+		} catch(err) {
+			this.logger.error(err);
+			return null;
+		}
+	}
+
+	async editEmailUser(userId: string, email: string): Promise<UserDocument> {
+		try {
+			const userData = await this.findUserById(userId);
+			if(!userData || !userData.user) {
+				this.logger.log("User not found");
+				return null;
+			}
+
+			const updatedUser = await this.userModel.findByIdAndUpdate(userId, {$set: {email: email}}, {new: true}).exec();
+			if(userData.cache) {
+				this.cacheManager.set(`user:${userId}`, updatedUser, this.CACHE_TIME);
+			}
+			this.logger.log(`Updated email of user:${userId}`);
+		} catch(err) {
+			this.logger.error(err);
+			return null;
+		}
+	}
+
+	async editUserSetting(userId: string, avatar?: string, dob?: Date, location?: string, about?: string): Promise<UserDocument> {
+		try {
+			const userData = await this.findUserById(userId);
+			if(!userData || !userData.user) {
+				this.logger.log("User not found");
+				return null;
+			}
+
+			const updatedUser = await this.userModel.findByIdAndUpdate(userId, {$set: 
+				{
+					avatar: avatar ? avatar : userData.user.avatar, 
+					setting: {
+						date_of_birth: dob ? dob : userData.user.setting.date_of_birth,
+						location: location ? location : userData.user.setting.location,
+						about: about ? about : userData.user.setting.about,
+						...userData.user.setting
+					}
+				}
+			}, {new: true}).exec();
+
+			if(userData.cache) {
+				this.cacheManager.set(`user:${userId}`, updatedUser, this.CACHE_TIME);
+			}
+			this.logger.log(`Updated information of user:${userId}`);
+		} catch(err) {
+			this.logger.error(err);
+			return null;
+		}
+	}
+
+	async editPasswordUser(userId: string, oldPassword: string, password: string): Promise<UserDocument> {
+		try {
+			const userData = await this.findUserById(userId);
+			if(!userData || !userData.user) {
+				this.logger.log("User not found");
+				return null;
+			}
+
+			if(userData.user.password !== oldPassword) {
+				this.logger.log("Password not match");
+				return null;
+			}
+
+			const updatedUser = await this.userModel.findByIdAndUpdate(userId, {$set: {password: password}}, {new: true}).exec();
+			if(userData.cache) {
+				this.cacheManager.set(`user:${userId}`, updatedUser, this.CACHE_TIME);
+			}
+			this.logger.log(`Updated password of user:${userId}`);
+		} catch(err) {
+			this.logger.error(err);
+			return null;
+		}
+	}
 
 
 

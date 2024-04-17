@@ -30,14 +30,16 @@ import { Public } from "src/auth/public";
 import { CreateUserDto } from "src/interface/create.dto";
 import { MongodbService } from "src/mongodb/mongodb.service";
 import { getFileType } from "src/utils/helper";
-import { CreateThread, UpdateMessage, UpdateThread } from "./type.dto";
-import { SHA256 } from "crypto-js";
-import { Readable } from "stream";
-import { createHash } from "crypto";
+import { CreateThread, UpdateEmail, UpdateMessage, UpdatePassword, UpdateSetting, UpdateThread, UpdateUsername } from "./type.dto";
+import { AuthService } from "src/auth/auth.service";
+import { JwtService } from "@nestjs/jwt";
+import { enc, SHA256 } from "crypto-js";
 
 @Controller("v2")
 export class UserControllerV2 {
 	constructor(
+		private readonly authService: AuthService,
+		private readonly jwtService: JwtService,
 		private readonly mongodbService: MongodbService,
 		@Inject(CACHE_MANAGER) private readonly cacheManager: RedisCache
 	) {}
@@ -285,6 +287,98 @@ export class UserControllerV2 {
 			return nonSensitive;
 		}
 	}
+
+	@HttpCode(HttpStatus.OK)
+	@Get("user/get-full")
+	async getUserFull(@Req() req) {
+		const result = await this.mongodbService.findUserById(req.user.id);
+		if(!result || !result.user) {
+			throw new HttpException("User not found", HttpStatus.BAD_REQUEST);
+		}
+		if(result.cache) {
+			const {password, ...user} = result.user;
+			return user;
+		} else {
+			const {password, ...user} = result.user.toObject();
+			return user;
+		}
+	}
+
+	@HttpCode(HttpStatus.OK)
+	@Post("/v2/user/update-username")
+	async updateUsername(@Req() req, @Res({passthrough: true}) res, @Body() body: UpdateUsername) {
+		if(req.user.id !== body.userId) {
+			throw new HttpException("User not match", HttpStatus.BAD_REQUEST);
+		}
+
+		const user = await this.mongodbService.editUsernameUser(body.userId, body.username);
+
+		if(!user) {
+			throw new HttpException("Error updating", HttpStatus.BAD_REQUEST);
+		}
+		// update session and cookie
+		const newRefreshToken = this.authService.encryptRefreshToken({id: req.user.id, username: body.username});
+		req.session.passport.user.username = body.username;
+		req.session.passport.user.refreshToken = newRefreshToken;
+		req.session.save();
+		res.cookie('refresh_token', newRefreshToken);
+		res.cookie('jwt', this.jwtService.sign({id: req.user.id, username: body.username}));
+		// save cache
+		await this.cacheManager.set(`login:${req.user.id}:token`, newRefreshToken, 86400*1000);
+		return true;
+	}
+
+	@HttpCode(HttpStatus.OK)
+	@Post("/v2/user/update-email")
+	async updateEmail(@Req() req, @Body() body: UpdateEmail) {
+		if(req.user.id !== body.userId) {
+			throw new HttpException("User not match", HttpStatus.BAD_REQUEST);
+		}
+
+		const user = await this.mongodbService.editEmailUser(body.userId, body.email);
+
+		if(!user) {
+			throw new HttpException("Error updating", HttpStatus.BAD_REQUEST);
+		}
+		return true;
+	}
+
+	@HttpCode(HttpStatus.OK)
+	@Post("/v2/user/update")
+	async updateSetting(@Req() req, @Body() body: UpdateSetting) {
+		if(req.user.id !== body.userId) {
+			throw new HttpException("User not match", HttpStatus.BAD_REQUEST);
+		}
+
+		const user = await this.mongodbService.editUserSetting(
+			body.userId, 
+			body.avatar, 
+			body.dob, 
+			body.location, 
+			body.about
+		);
+
+		if(!user) {
+			throw new HttpException("Error updating", HttpStatus.BAD_REQUEST);
+		}
+		return true;
+	}
+
+	@HttpCode(HttpStatus.OK)
+	@Post("/v2/user/update-password")
+	async updatePassword(@Req() req, @Body() body: UpdatePassword) {
+		if(req.user.id !== body.userId) {
+			throw new HttpException("User not match", HttpStatus.BAD_REQUEST);
+		}
+
+		const user = await this.mongodbService.editPasswordUser(body.userId, SHA256(body.oldPassword).toString(enc.Hex), SHA256(body.password).toString(enc.Hex));
+
+		if(!user) {
+			throw new HttpException("Error updating", HttpStatus.BAD_REQUEST);
+		}
+		return true;
+	}
+
 
 	
 

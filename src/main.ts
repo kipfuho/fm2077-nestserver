@@ -60,6 +60,7 @@ async function bootstrap() {
     cookie: {
       sameSite: "none",
       secure: true,
+      httpOnly: true
     }
   }));
   app.use(passport.initialize())

@@ -61,7 +61,7 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
       request.session.destroy();
       throw new HttpException("Someone has logged into your account", HttpStatus.FORBIDDEN);
     }
-    
+
     // activate jwt through strategy
     // catch error is probably due to expired token
     // renew access token in this case
@@ -78,7 +78,9 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
       // else destroy sesion
       if(request.session.passport.user.refreshToken !== request.cookies.refresh_token) {
         this.logger.debug(`Refresh token error!`);
-        throw new HttpException("Refresh token error, destroying session", HttpStatus.UNAUTHORIZED);
+        console.log(`sess: ${request.session.passport.user.refreshToken}`);
+        console.log(`cookie: ${request.cookies.refresh_token}`)
+        throw new HttpException("Old tokens received, possible duplicated requests", HttpStatus.UNAUTHORIZED);
       } else {
         // create new token and attach to response
         const newRefreshToken = this.authService.encryptRefreshToken({id: request.user.id, username: request.user.username});
