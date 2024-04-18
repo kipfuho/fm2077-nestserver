@@ -51,6 +51,9 @@ export class UpdateUsername {
 
 	@IsString()
 	username: string;
+
+	@IsString()
+	password: string;
 }
 
 export class UpdateEmail {
@@ -59,6 +62,9 @@ export class UpdateEmail {
 
 	@IsString()
 	email: string;
+
+	@IsString()
+	password: string;
 }
 
 export class UpdatePassword {
@@ -83,4 +89,7 @@ export class UpdateSetting {
 	location: string;
 
 	about: string;
+
+	@IsString()
+	password: string;
 }

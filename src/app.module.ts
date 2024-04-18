@@ -10,6 +10,7 @@ import { RedisClientOptions } from 'redis';
 import { redisStore } from 'cache-manager-redis-yet';
 import { MongodbModule } from './mongodb/mongodb.module';
 import { UserModuleV2 } from './user/v2/user.module';
+import { MailModule } from './mail/mail.module';
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { UserModuleV2 } from './user/v2/user.module';
 			}),
       inject: [ConfigService],
     }),
+    MailModule,
   ],
   providers: [AppService]
 })

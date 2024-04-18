@@ -145,13 +145,18 @@ export class MongodbService {
 		return await this.userModel.find().exec();
 	}
 
-	async editUsernameUser(userId: string, username: string): Promise<UserDocument> {
+	async editUsernameUser(userId: string, password: string, username: string): Promise<UserDocument> {
 		try {
 			const userData = await this.findUserById(userId);
 			if(!userData || !userData.user) {
 				this.logger.log("User not found");
 				return null;
 			}
+			if(userData.user.password !== password) {
+				this.logger.log("Password not match");
+				return null;
+			}
+
 			const updatedUser = await this.userModel.findByIdAndUpdate(userId, {$set: {username: username}}, {new: true}).exec();
 			if(userData.cache) {
 				this.cacheManager.set(`user:${userId}`, updatedUser, this.CACHE_TIME);
@@ -163,11 +168,15 @@ export class MongodbService {
 		}
 	}
 
-	async editEmailUser(userId: string, email: string): Promise<UserDocument> {
+	async editEmailUser(userId: string, password: string, email: string): Promise<UserDocument> {
 		try {
 			const userData = await this.findUserById(userId);
 			if(!userData || !userData.user) {
 				this.logger.log("User not found");
+				return null;
+			}
+			if(userData.user.password !== password) {
+				this.logger.log("Password not match");
 				return null;
 			}
 
@@ -182,11 +191,15 @@ export class MongodbService {
 		}
 	}
 
-	async editUserSetting(userId: string, avatar?: string, dob?: Date, location?: string, about?: string): Promise<UserDocument> {
+	async editUserSetting(userId: string, password: string, avatar?: string, dob?: Date, location?: string, about?: string): Promise<UserDocument> {
 		try {
 			const userData = await this.findUserById(userId);
 			if(!userData || !userData.user) {
 				this.logger.log("User not found");
+				return null;
+			}
+			if(userData.user.password !== password) {
+				this.logger.log("Password not match");
 				return null;
 			}
 

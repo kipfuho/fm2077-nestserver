@@ -305,13 +305,13 @@ export class UserControllerV2 {
 	}
 
 	@HttpCode(HttpStatus.OK)
-	@Post("/v2/user/update-username")
+	@Post("user/update-username")
 	async updateUsername(@Req() req, @Res({passthrough: true}) res, @Body() body: UpdateUsername) {
 		if(req.user.id !== body.userId) {
 			throw new HttpException("User not match", HttpStatus.BAD_REQUEST);
 		}
 
-		const user = await this.mongodbService.editUsernameUser(body.userId, body.username);
+		const user = await this.mongodbService.editUsernameUser(body.userId, SHA256(body.password).toString(enc.Hex), body.username);
 
 		if(!user) {
 			throw new HttpException("Error updating", HttpStatus.BAD_REQUEST);
@@ -329,13 +329,13 @@ export class UserControllerV2 {
 	}
 
 	@HttpCode(HttpStatus.OK)
-	@Post("/v2/user/update-email")
+	@Post("user/update-email")
 	async updateEmail(@Req() req, @Body() body: UpdateEmail) {
 		if(req.user.id !== body.userId) {
 			throw new HttpException("User not match", HttpStatus.BAD_REQUEST);
 		}
 
-		const user = await this.mongodbService.editEmailUser(body.userId, body.email);
+		const user = await this.mongodbService.editEmailUser(body.userId, SHA256(body.password).toString(enc.Hex), body.email);
 
 		if(!user) {
 			throw new HttpException("Error updating", HttpStatus.BAD_REQUEST);
@@ -344,14 +344,15 @@ export class UserControllerV2 {
 	}
 
 	@HttpCode(HttpStatus.OK)
-	@Post("/v2/user/update")
+	@Post("user/update")
 	async updateSetting(@Req() req, @Body() body: UpdateSetting) {
 		if(req.user.id !== body.userId) {
 			throw new HttpException("User not match", HttpStatus.BAD_REQUEST);
 		}
 
 		const user = await this.mongodbService.editUserSetting(
-			body.userId, 
+			body.userId,
+			SHA256(body.password).toString(enc.Hex),
 			body.avatar, 
 			body.dob, 
 			body.location, 
@@ -365,7 +366,7 @@ export class UserControllerV2 {
 	}
 
 	@HttpCode(HttpStatus.OK)
-	@Post("/v2/user/update-password")
+	@Post("user/update-password")
 	async updatePassword(@Req() req, @Body() body: UpdatePassword) {
 		if(req.user.id !== body.userId) {
 			throw new HttpException("User not match", HttpStatus.BAD_REQUEST);
