@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
+import { Model } from 'mongoose';
 import { User, UserDocument } from './schema/user.schema';
 import { Category, CategoryDocument } from './schema/category.schema';
 import { Forum, ForumDocument } from './schema/forum.schema';
@@ -10,6 +10,8 @@ import { Reaction, ReactionDocument } from './schema/reaction.schema';
 import { Tag, TagDocument } from './schema/tag.schema';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { RedisCache } from 'cache-manager-redis-yet';
+import { enc, SHA256 } from 'crypto-js';
+import { MailService } from 'src/mail/mail.service';
 
 @Injectable()
 export class MongodbService {
@@ -21,7 +23,8 @@ export class MongodbService {
 		@InjectModel(Message.name) private readonly messageModel: Model<Message>,
 		@InjectModel(Reaction.name) private readonly reactionModel: Model<Reaction>,
 		@InjectModel(Tag.name) private readonly tagModel: Model<Tag>,
-		@Inject(CACHE_MANAGER) private readonly cacheManager: RedisCache
+		@Inject(CACHE_MANAGER) private readonly cacheManager: RedisCache,
+		private readonly mailService: MailService
 	) {}
 
 	private readonly logger = new Logger(MongodbService.name);
@@ -86,7 +89,7 @@ export class MongodbService {
 				avatar: null,
 				messages: 0,
 				likes: 0,
-				class: 1,
+				class: 0,
 				setting: {
 					date_of_birth: null,
 					location: null,
@@ -243,6 +246,51 @@ export class MongodbService {
 				this.cacheManager.set(`user:${userId}`, updatedUser, this.CACHE_TIME);
 			}
 			this.logger.log(`Updated password of user:${userId}`);
+		} catch(err) {
+			this.logger.error(err);
+			return null;
+		}
+	}
+
+	async createVerifyCode(userId: string) {
+		try {
+			const userData = await this.findUserById(userId);
+			if(!userData || !userData.user) {
+				this.logger.log("User not found");
+				return null;
+			}
+			const code = SHA256(userId).toString(enc.Hex);
+			await this.cacheManager.set(`user:${userId}:verifyCode`, code, 30*60000); // 30 minutes
+			this.mailService.sendUserConfirmation(userData.user, code);
+			this.logger.log("Created verify code");
+			return code;
+		} catch(err) {
+			this.logger.error(err);
+			return null;
+		}
+	}
+
+	async verifyEmail(userId: string, code: string) {
+		try {
+			const userData = await this.findUserById(userId);
+			if(!userData || !userData.user) {
+				this.logger.log("User not found");
+				return null;
+			}
+
+			const cacheCode = await this.cacheManager.get(`user:${userId}:verifyCode`);
+			if(cacheCode !== code) {
+				this.logger.log("Code not match");
+				return null;
+			}
+
+			const _user = await this.userModel.findByIdAndUpdate(userId, {$set: {class: 1}});
+			await Promise.all([
+				this.cacheManager.set(`user:${userId}`, _user, this.CACHE_TIME),
+				this.cacheManager.del(`user:${userId}:verifyCode`)
+			]);
+			
+			return _user;
 		} catch(err) {
 			this.logger.error(err);
 			return null;

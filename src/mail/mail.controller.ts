@@ -7,9 +7,4 @@ export class MailController {
 		private readonly mailService: MailService
 	) {}
 
-	@Get("test")
-	async sendmail() {
-		const result = await this.mailService.sendUserConfirmation("ctcakip@gmail.com");
-		return result;
-	}
 }

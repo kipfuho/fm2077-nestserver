@@ -27,7 +27,7 @@ export class User {
 	likes: number;
 	
 	@Prop()
-	class: number
+	class: number;
 	
 	@Prop({type: {
 		date_of_birth: {type: Date},

@@ -3,7 +3,6 @@ import { MongodbService } from './mongodb.service';
 import { Public } from 'src/auth/public';
 import { enc, SHA256 } from 'crypto-js';
 import { TagDocument } from './schema/tag.schema';
-import { ForumDocument } from './schema/forum.schema';
 import { CategoryDocument } from './schema/category.schema';
 
 @Controller('mongodb')

@@ -181,7 +181,8 @@ export class UserControllerV2 {
 		const result = await this.mongodbService.createUser(username, email, password);
 		if(result) {
 			this.logger.log("API /v2/register succeeded" + createUserDto);
-			return {message: "Created"};
+			await this.mongodbService.createVerifyCode(result._id.toHexString());
+			return {message: "Created, please verify your email for full permission"};
 		} else {
 			this.logger.log("API /v2/register failed, username or email exist");
 			return {message: "Username or Email existed"};
