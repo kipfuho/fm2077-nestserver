@@ -381,6 +381,27 @@ export class UserControllerV2 {
 		return true;
 	}
 
+	@HttpCode(HttpStatus.OK)
+	@Get("user/create-verify")
+	async createVerifyCode(@Req() req) {
+		const code = await this.mongodbService.createVerifyCode(req.user.id);
+		if(!code) {
+			throw new HttpException("Could not create a verification code", HttpStatus.BAD_REQUEST);
+		}
+		return true;
+	}
+
+	@HttpCode(HttpStatus.OK)
+	@Public()
+	@Get("user/verify-email")
+	async verifyEmail(@Query("userId") userId: string, @Query("code") code: string) {
+		const result = await this.mongodbService.verifyEmail(userId, code);
+		if(!result) {
+			throw new HttpException("Verification failed", HttpStatus.BAD_REQUEST);
+		}
+		return true;
+	}
+
 
 	
 

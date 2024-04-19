@@ -259,6 +259,11 @@ export class MongodbService {
 				this.logger.log("User not found");
 				return null;
 			}
+			if(userData.user.class > 0) {
+				this.logger.log("User email has been verified");
+				return null;
+			}
+			
 			const code = SHA256(userId).toString(enc.Hex);
 			await this.cacheManager.set(`user:${userId}:verifyCode`, code, 30*60000); // 30 minutes
 			this.mailService.sendUserConfirmation(userData.user, code);
