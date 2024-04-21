@@ -14,7 +14,7 @@ export class MailService {
       template: './confirmation', // `.hbs` extension is appended automatically
       context: { // ✏️ filling curly brackets with content
         name: user.username,
-        url: `https://localhost:3000/account/verify-email/userId=${user._id}&code=${code}`,
+        url: `https://localhost:3000/verify-email/userId=${user._id}&code=${code}`,
       },
     });
 		return "OK";

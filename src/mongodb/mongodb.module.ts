@@ -13,6 +13,7 @@ import { User, UserSchema } from './schema/user.schema';
 import { CacheModule } from '@nestjs/cache-manager';
 import { RedisClientOptions } from 'redis';
 import { redisStore } from 'cache-manager-redis-yet';
+import { MailModule } from 'src/mail/mail.module';
 
 @Module({
   imports: [
@@ -46,6 +47,7 @@ import { redisStore } from 'cache-manager-redis-yet';
 			}),
       inject: [ConfigService],
     }),
+    MailModule
   ],
   providers: [MongodbService],
   exports: [MongodbService],

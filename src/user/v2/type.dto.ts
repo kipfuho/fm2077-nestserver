@@ -17,6 +17,19 @@ export class CreateThread {
 	tag: Tag[];
 }
 
+export class ReplyThread {
+	@IsString()
+	threadId: string;
+	
+	@IsString()
+	userId: string;
+
+	@IsString()
+	content: string;
+	
+	attachments: string[];
+}
+
 export class UpdateThread {
 	@IsString()
 	threadId: string;

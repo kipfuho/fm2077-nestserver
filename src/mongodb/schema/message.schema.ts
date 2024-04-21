@@ -18,6 +18,9 @@ export class Message {
 	@Prop()
 	content: string;
 
+	@Prop({type: [{type: String}]})
+	attachments: string[];
+
 	@Prop({type: {
 		like: [{type: String}],
 		love: [{type: String}],

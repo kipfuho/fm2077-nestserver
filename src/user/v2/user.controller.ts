@@ -30,7 +30,7 @@ import { Public } from "src/auth/public";
 import { CreateUserDto } from "src/interface/create.dto";
 import { MongodbService } from "src/mongodb/mongodb.service";
 import { getFileType } from "src/utils/helper";
-import { CreateThread, UpdateEmail, UpdateMessage, UpdatePassword, UpdateSetting, UpdateThread, UpdateUsername } from "./type.dto";
+import { CreateThread, ReplyThread, UpdateEmail, UpdateMessage, UpdatePassword, UpdateSetting, UpdateThread, UpdateUsername } from "./type.dto";
 import { AuthService } from "src/auth/auth.service";
 import { JwtService } from "@nestjs/jwt";
 import { enc, SHA256 } from "crypto-js";
@@ -137,7 +137,7 @@ export class UserControllerV2 {
       filename: (req, file, cb) => {
         // create a unique filename
         const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1E9)}`;
-        const filename = `${uniqueSuffix}-${file.originalname.replaceAll(" ", "")}}`;
+        const filename = `${uniqueSuffix}-${file.originalname.replaceAll(" ", "")}`;
         return cb(null, filename);
       }
     })
@@ -145,6 +145,32 @@ export class UserControllerV2 {
   uploadImageMany(@UploadedFiles() files: { images?: Express.Multer.File[]}) {
 		this.logger.log(`API /v2/image/upload-many succeeded ${files.images}`);
 		const links = files.images.map((image) => `https://localhost:3001/v2/image/${image.filename}`);
+		return { 
+			message: "uploaded",
+			link: links
+		};
+  }
+
+	// upload many attachments to the forum storage
+	@HttpCode(HttpStatus.OK)
+	@Public()
+  @Post('/files/upload-many')
+  @UseInterceptors(FileFieldsInterceptor([
+    { name: 'attachments', maxCount: 10 }, // 10 files max
+  ], {
+    storage: diskStorage({
+      destination: './forum_storage',
+      filename: (req, file, cb) => {
+        // create a unique filename
+        const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1E9)}`;
+        const filename = `${uniqueSuffix}-${file.originalname.replaceAll(" ", "")}`;
+        return cb(null, filename);
+      }
+    })
+  }))
+  uploadFilesMany(@UploadedFiles() files: { attachments?: Express.Multer.File[]}) {
+		this.logger.log(`API /v2/image/upload-many succeeded ${files.attachments}`);
+		const links = files.attachments.map((file) => `https://localhost:3001/v2/image/${file.filename}`);
 		return { 
 			message: "uploaded",
 			link: links
@@ -182,10 +208,14 @@ export class UserControllerV2 {
 		if(result) {
 			this.logger.log("API /v2/register succeeded" + createUserDto);
 			await this.mongodbService.createVerifyCode(result._id.toHexString());
-			return {message: "Created, please verify your email for full permission"};
+			return {
+				message: "Registered successfully. A link has been sent to your email, please verify for full permission"
+			};
 		} else {
 			this.logger.log("API /v2/register failed, username or email exist");
-			return {message: "Username or Email existed"};
+			return {
+				message: "Username or Email existed"
+			};
 		}
   }
 
@@ -203,8 +233,11 @@ export class UserControllerV2 {
 		res.cookie('refresh_token', req.session.passport.user.refreshToken);
 		this.logger.log("API /v2/login ");
     return {
-			id: req.user.id,
-			username: req.user.username
+			user: {
+				id: req.user.id,
+				username: req.user.username
+			},
+			message: "Success"
 		};
   }
 
@@ -560,6 +593,19 @@ export class UserControllerV2 {
 		return result;
 	}
 
+	@HttpCode(HttpStatus.OK)
+	@Post("thread/reply")
+	async replyThread(@Req() req, @Body() body: ReplyThread) {
+		if(req.user.id !== body.userId) {
+			throw new HttpException("User not match", HttpStatus.BAD_REQUEST);
+		}
+		const message = await this.mongodbService.createMessage(body.threadId, body.userId, body.content, body.attachments);
+		return {
+			message: "Created a new message",
+			item: message
+		}
+	}
+
 
 
 
@@ -623,5 +669,31 @@ export class UserControllerV2 {
 			throw new HttpException("Messages not found", HttpStatus.NOT_FOUND);
 		}
 		return messages;
+	}
+
+	@HttpCode(HttpStatus.OK)
+	@Get("message/add-reaction")
+	async addReactionToMessage(@Req() req, @Query("messageId") messageId: string, @Query("type") type: string) {
+		const result = await this.mongodbService.addReactionToMessage(messageId, req.user.id, type);
+		if(!result) {
+			throw new HttpException("Error adding reaction to message", HttpStatus.BAD_REQUEST);
+		}
+		return {
+			message: "Added a reaction to message",
+			item: result
+		}
+	}
+
+	@HttpCode(HttpStatus.OK)
+	@Get("message/remove-reaction")
+	async removeReactionToMessage(@Req() req, @Query("messageId") messageId: string) {
+		const result = this.mongodbService.removeReactionOfMessage(messageId, req.user.id);
+		if(!result) {
+			throw new HttpException("Error removing reaction from message", HttpStatus.BAD_REQUEST);
+		}
+		return {
+			message: "Removed reaction from message",
+			item: result
+		}
 	}
 }

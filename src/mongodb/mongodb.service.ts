@@ -646,7 +646,7 @@ export class MongodbService {
 	------------------------------------------------------------------
 	*/
 
-	async createMessage(threadId: string, userId: string, content: string): Promise<MessageDocument> {
+	async createMessage(threadId: string, userId: string, content: string, attachments?: string[]): Promise<MessageDocument> {
 		try {
 			const [threadData, userData] = await Promise.all([this.findThreadById(threadId), this.findUserById(userId)]);
 			if(!threadData || !threadData.thread || !userData || !userData.user) {
@@ -660,6 +660,7 @@ export class MongodbService {
 				content,
 				create_time: time,
 				update_time: time,
+				attachments: attachments ?? [],
 				reactions: {
 					'like': [],
 					'love': [],
@@ -705,7 +706,7 @@ export class MongodbService {
 		}
 	}
 
-	async addReactionToMessage(messageId: string,  userId: string, type: string): Promise<ReactionDocument> {
+	async addReactionToMessage(messageId: string,  userId: string, type: string): Promise<MessageDocument> {
 		try {
 			const [messageData, userData, reaction] = await Promise.all([
 				this.findMessageById(messageId), 
@@ -731,15 +732,14 @@ export class MongodbService {
 				this.cacheManager.set(`message:${messageId}`, newMessage, this.CACHE_TIME),
 				this.cacheManager.set(`user:${messageData.message.user}`, newUser)
 			]);
-			if(userData.cache)
-			return reaction;
+			return newMessage;
 		} catch(err) {
 			this.logger.error(err);
 			return null;
 		}
 	}
 
-	async removeReactionOfMessage(messageId: string,  userId: string, type: string): Promise<{message: MessageDocument, user: UserDocument}> {
+	async removeReactionOfMessage(messageId: string,  userId: string): Promise<MessageDocument> {
 		try {
 			const [messageData, userData, reaction] = await Promise.all([
 				this.findMessageById(messageId), 
@@ -764,7 +764,7 @@ export class MongodbService {
 				this.cacheManager.set(`message:${messageId}`, message, this.CACHE_TIME),
 				this.cacheManager.set(`user:${messageData.message.user}`, user, this.CACHE_TIME)
 			]);
-			return {message, user};
+			return message;
 		} catch(err) {
 			this.logger.error(err);
 			return null;
@@ -808,6 +808,28 @@ export class MongodbService {
 		}
 	}
 
+	async addAttachment(messageId: string, attachments: string[]): Promise<MessageDocument> {
+		try {
+			const messageData = await this.findMessageById(messageId);
+			if(!messageData || !messageData.message) {
+				this.logger.log("Message not found");
+				return null;
+			}
+
+			if(messageData.message.attachments.length === 0) {
+				const _message =  await this.messageModel.findByIdAndUpdate(messageId, {$set: {attachments: attachments}}, {new: true});
+				await this.cacheManager.set(`message:${messageId}`, _message, this.CACHE_TIME);
+				return _message;
+			} else {
+				const _message = await this.messageModel.findByIdAndUpdate(messageId, {$push: {attachments: attachments}}, {new: true});
+				await this.cacheManager.set(`message:${messageId}`, _message, this.CACHE_TIME);
+				return _message;
+			}
+		} catch(err) {
+			this.logger.error(err);
+			return null;
+		}
+	}
 
 
 
