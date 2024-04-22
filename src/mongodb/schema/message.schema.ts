@@ -3,9 +3,11 @@ import { HydratedDocument } from "mongoose";
 
 @Schema()
 export class Message {
+	// thread that the message belong to
 	@Prop()
 	thread: string;
 
+	// user made the message
 	@Prop()
 	user: string;
 
@@ -15,12 +17,15 @@ export class Message {
 	@Prop()
 	update_time: Date;
 
+	// content of the thread, html string
 	@Prop()
 	content: string;
 
+	// attachments's links
 	@Prop({type: [{type: String}]})
 	attachments: string[];
 
+	// reactions for the message
 	@Prop({type: {
 		like: [{type: String}],
 		love: [{type: String}],

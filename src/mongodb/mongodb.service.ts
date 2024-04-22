@@ -12,6 +12,9 @@ import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { RedisCache } from 'cache-manager-redis-yet';
 import { enc, SHA256 } from 'crypto-js';
 import { MailService } from 'src/mail/mail.service';
+import { Alert, AlertDocument } from './schema/alert.schema';
+import { Bookmark, BookmarkDocument } from './schema/bookmark.schema';
+import { Rating, RatingDocument } from './schema/rating.schema';
 
 @Injectable()
 export class MongodbService {
@@ -23,6 +26,9 @@ export class MongodbService {
 		@InjectModel(Message.name) private readonly messageModel: Model<Message>,
 		@InjectModel(Reaction.name) private readonly reactionModel: Model<Reaction>,
 		@InjectModel(Tag.name) private readonly tagModel: Model<Tag>,
+		@InjectModel(Tag.name) private readonly alertModel: Model<Alert>,
+		@InjectModel(Tag.name) private readonly bookmarkModel: Model<Bookmark>,
+		@InjectModel(Tag.name) private readonly ratingModel: Model<Rating>,
 		@Inject(CACHE_MANAGER) private readonly cacheManager: RedisCache,
 		private readonly mailService: MailService
 	) {}
@@ -99,6 +105,11 @@ export class MongodbService {
 				}
 			});
 			this.logger.log(`Created a new user, id:${user._id.toHexString()}`);
+			// create alert for email verification
+			await this.createAlert(
+				user._id.toHexString(),
+				"Verify your email for full permission"
+			);
 			return user;
 		} catch(err) {
 			this.logger.error(err);
@@ -513,6 +524,10 @@ export class MongodbService {
 				this.cacheManager.set(`forum:${forumId}`, forum);
 			}
 			this.logger.log(`Created a new thread, id=${thread._id.toHexString()}`);
+			// populate alert for followers
+			userData.user.followers.forEach(follower => {
+				this.createAlert(follower, `<user>${userId}</user> posted a new thread <thread>${thread._id}</thread>`)
+			});
 			return thread;
 		} catch(err) {
 			this.logger.error(err);
@@ -949,6 +964,232 @@ export class MongodbService {
 			}
 			this.logger.log(`DB:::Found reaction:${reaction}`);
 			return {cache: false, reaction: reaction};
+		} catch(err) {
+			this.logger.error(err);
+			return null;
+		}
+	}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+	/* Alert model
+	------------------------------------------------------------------
+	------------------------------------------------------------------
+	------------------------------------------------------------------
+	------------------------------------------------------------------
+	------------------------------------------------------------------
+	------------------------------------------------------------------
+	------------------------------------------------------------------
+	*/
+
+	async createAlert(userId: string, detail: string): Promise<AlertDocument> {
+		try {
+			const userData = await this.findUserById(userId);
+			if(!userData || !userData.user) {
+				this.logger.log("User not found");
+				return null;
+			}
+			const time = new Date();
+			const alert = await this.alertModel.create({
+				user: userId,
+				detail,
+				read: false,
+				create_time: time
+			});
+			this.logger.log(`Created new alert, id=${alert._id}`);
+			return alert;
+		} catch(err) {
+			this.logger.error(err);
+			return null;
+		}
+	}
+
+	async findAlertById(alertId: string): Promise<{cache: boolean, alert: AlertDocument}> {
+		try {
+			const cache: AlertDocument = await this.cacheManager.get(`alert:${alertId}`);
+			if(cache) {
+				this.logger.log(`CACHE:::Found alert:${alertId}`);
+				return {
+					cache: true,
+					alert: cache
+				};
+			}
+
+			const alert = await this.alertModel.findById(alertId).exec();
+			if(alert) {
+				await this.cacheManager.set(`alert:${alertId}`, alert, this.CACHE_TIME);
+			}
+			this.logger.log(`DB:::Found alert:${alert}`);
+			return {
+				cache: false,
+				alert: alert
+			};
+		} catch(err) {
+			this.logger.error(err);
+			return null;
+		}
+	}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+	/* Bookmark model
+	------------------------------------------------------------------
+	------------------------------------------------------------------
+	------------------------------------------------------------------
+	------------------------------------------------------------------
+	------------------------------------------------------------------
+	------------------------------------------------------------------
+	------------------------------------------------------------------
+	*/
+
+	async createBookmark(threadId: string, userId: string): Promise<BookmarkDocument> {
+		try {
+			const [threadData, userData] = await Promise.all([
+				this.findThreadById(threadId),
+				this.findUserById(userId)
+			]);
+			if(!userData || !userData.user || !threadData || !threadData.thread) {
+				this.logger.log("User or thread not found");
+				return null;
+			}
+			const time = new Date();
+			const bookmark = await this.bookmarkModel.create({
+				thread: threadId,
+				user: userId,
+				create_time: time
+			});
+			this.logger.log(`Created new bookmark, id=${bookmark._id}`);
+			return bookmark;
+		} catch(err) {
+			this.logger.error(err);
+			return null;
+		}
+	}
+
+	async findBookmarkById(bookmarkId: string): Promise<{cache: boolean, bookmark: BookmarkDocument}> {
+		try {
+			const cache: BookmarkDocument = await this.cacheManager.get(`bookmark:${bookmarkId}`);
+			if(cache) {
+				this.logger.log(`CACHE:::Found bookmark:${bookmarkId}`);
+				return {
+					cache: true,
+					bookmark: cache
+				};
+			}
+
+			const bookmark = await this.bookmarkModel.findById(bookmarkId).exec();
+			if(bookmark) {
+				await this.cacheManager.set(`bookmark:${bookmarkId}`, bookmark, this.CACHE_TIME);
+			}
+			this.logger.log(`DB:::Found bookmark:${bookmark}`);
+			return {
+				cache: false,
+				bookmark: bookmark,
+			};
+		} catch(err) {
+			this.logger.error(err);
+			return null;
+		}
+	}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+	/* Rating model
+	------------------------------------------------------------------
+	------------------------------------------------------------------
+	------------------------------------------------------------------
+	------------------------------------------------------------------
+	------------------------------------------------------------------
+	------------------------------------------------------------------
+	------------------------------------------------------------------
+	*/
+
+	async createRating(threadId: string, userId: string, score: number): Promise<RatingDocument> {
+		try {
+			const [threadData, userData] = await Promise.all([
+				this.findThreadById(threadId),
+				this.findUserById(userId)
+			]);
+			if(!userData || !userData.user || !threadData || !threadData.thread) {
+				this.logger.log("User or thread not found");
+				return null;
+			}
+			const time = new Date();
+			const rating = await this.ratingModel.create({
+				thread: threadId,
+				user: userId,
+				create_time: time,
+				score: score
+			});
+			this.logger.log(`Created new rating, id=${rating._id}`);
+			return rating;
+		} catch(err) {
+			this.logger.error(err);
+			return null;
+		}
+	}
+
+	async findRatingById(ratingId: string): Promise<{cache: boolean, rating: RatingDocument}> {
+		try {
+			const cache: RatingDocument = await this.cacheManager.get(`rating:${ratingId}`);
+			if(cache) {
+				this.logger.log(`CACHE:::Found rating:${ratingId}`);
+				return {
+					cache: true,
+					rating: cache
+				};
+			}
+
+			const rating = await this.ratingModel.findById(ratingId).exec();
+			if(rating) {
+				await this.cacheManager.set(`rating:${ratingId}`, rating, this.CACHE_TIME);
+			}
+			this.logger.log(`DB:::Found rating:${rating}`);
+			return {
+				cache: false,
+				rating: rating,
+			};
 		} catch(err) {
 			this.logger.error(err);
 			return null;

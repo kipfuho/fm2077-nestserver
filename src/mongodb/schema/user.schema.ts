@@ -25,6 +25,14 @@ export class User {
 
 	@Prop()
 	likes: number;
+
+	// list of following
+	@Prop({type: [{type: String}]})
+	followings: string[];
+
+	// list of follower
+	@Prop({type: [{type: String}]})
+	followers: string[];
 	
 	@Prop()
 	class: number;
