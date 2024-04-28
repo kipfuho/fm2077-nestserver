@@ -27,23 +27,23 @@ export class Message {
 
 	// reactions for the message
 	@Prop({type: {
-		like: [{type: String}],
-		love: [{type: String}],
-		care: [{type: String}],
-		haha: [{type: String}],
-		wow: [{type: String}],
-		sad: [{type: String}],
-		angry: [{type: String}],
+		like: {type: Number},
+		love: {type: Number},
+		care: {type: Number},
+		haha: {type: Number},
+		wow: {type: Number},
+		sad: {type: Number},
+		angry: {type: Number},
 		_id: false
 	}})
 	reactions: {
-		like: String[],
-		love: String[],
-		care: String[],
-		haha: String[],
-		wow: String[],
-		sad: String[],
-		angry: String[]
+		like: number,
+		love: number,
+		care: number,
+		haha: number,
+		wow: number,
+		sad: number,
+		angry: number
 	};
 
 	@Prop()

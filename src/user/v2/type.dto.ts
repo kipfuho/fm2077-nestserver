@@ -30,6 +30,17 @@ export class ReplyThread {
 	attachments: string[];
 }
 
+export class CreateProfilePosting {
+	@IsString()
+	userId: string;
+
+	@IsString()
+	userWallId: string;
+
+	@IsString()
+	message: string;
+}
+
 export class UpdateThread {
 	@IsString()
 	threadId: string;

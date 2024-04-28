@@ -14,6 +14,11 @@ import { CacheModule } from '@nestjs/cache-manager';
 import { RedisClientOptions } from 'redis';
 import { redisStore } from 'cache-manager-redis-yet';
 import { MailModule } from 'src/mail/mail.module';
+import { Alert, AlertSchema } from './schema/alert.schema';
+import { Bookmark, BookmarkSchema } from './schema/bookmark.schema';
+import { Rating, RatingSchema } from './schema/rating.schema';
+import { ProfilePosting, ProfilePostingSchema } from './schema/profileposting.schema';
+import { Report, ReportSchema } from './schema/report.schema';
 
 @Module({
   imports: [
@@ -32,6 +37,11 @@ import { MailModule } from 'src/mail/mail.module';
       {name: Message.name, schema: MessageSchema},
       {name: Tag.name, schema: TagSchema},
       {name: Reaction.name, schema: ReactionSchema},
+      {name: Alert.name, schema: AlertSchema},
+      {name: Bookmark.name, schema: BookmarkSchema},
+      {name: Rating.name, schema: RatingSchema},
+      {name: ProfilePosting.name, schema: ProfilePostingSchema},
+      {name: Report.name, schema: ReportSchema},
     ]),
     CacheModule.registerAsync<RedisClientOptions>({
       imports: [ConfigModule],

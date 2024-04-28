@@ -30,7 +30,7 @@ import { Public } from "src/auth/public";
 import { CreateUserDto } from "src/interface/create.dto";
 import { MongodbService } from "src/mongodb/mongodb.service";
 import { getFileType } from "src/utils/helper";
-import { CreateThread, ReplyThread, UpdateEmail, UpdateMessage, UpdatePassword, UpdateSetting, UpdateThread, UpdateUsername } from "./type.dto";
+import { CreateProfilePosting, CreateThread, ReplyThread, UpdateEmail, UpdateMessage, UpdatePassword, UpdateSetting, UpdateThread, UpdateUsername } from "./type.dto";
 import { AuthService } from "src/auth/auth.service";
 import { JwtService } from "@nestjs/jwt";
 import { enc, SHA256 } from "crypto-js";
@@ -204,7 +204,7 @@ export class UserControllerV2 {
   @Post("/register")
   async addUser(@Body() createUserDto : CreateUserDto) {
     const { username, password, email } = createUserDto;
-		const result = await this.mongodbService.createUser(username, email, password);
+		const result = await this.mongodbService.createUser(username, email, SHA256(password).toString(enc.Hex));
 		if(result) {
 			this.logger.log("API /v2/register succeeded" + createUserDto);
 			await this.mongodbService.createVerifyCode(result._id.toHexString());
@@ -231,14 +231,24 @@ export class UserControllerV2 {
 		// attach access_token and refresh_token as cookie
 		res.cookie('jwt', req.session.passport.user.jwt);
 		res.cookie('refresh_token', req.session.passport.user.refreshToken);
-		this.logger.log("API /v2/login ");
-    return {
-			user: {
-				id: req.user.id,
-				username: req.user.username
-			},
-			message: "Success"
-		};
+
+		const result = await this.mongodbService.findUserById(req.user.id);
+		if(!result || !result.user) {
+			throw new HttpException("User not found", HttpStatus.NOT_FOUND);
+		}
+		if(result.cache) {
+			const {password, setting, ...nonSensitive} = result.user;
+			return {
+				message: "Success",
+				user: nonSensitive
+			};
+		} else {
+			const {password, setting, ...nonSensitive} = result.user.toObject();
+			return {
+				message: "Success",
+				user: nonSensitive
+			};
+		}
   }
 
 	// log out user
@@ -534,13 +544,25 @@ export class UserControllerV2 {
 	@Get("thread/get")
 	async getThreads(@Query("forumId") forumId: string, @Query("offset") offset: number, @Query("limit") limit: number, @Query("threadId") threadId: string) {
 		if(threadId) {
-			const result = await this.mongodbService.findThreadById(threadId);
+			// increase view count
+			const result = await this.mongodbService.findThreadById(threadId, true);
 			if(!result || !result.thread) {
 				throw new HttpException("Thread not found", HttpStatus.NOT_FOUND);
 			}
 			return result.thread;
 		}
 		const threads = await this.mongodbService.findThread(forumId, offset, limit);
+		if(!threads) {
+			throw new HttpException("Threads not found", HttpStatus.NOT_FOUND);
+		} 
+		return threads;
+	}
+
+	@HttpCode(HttpStatus.OK)
+	@Public()
+	@Get("thread/get-user")
+	async getThreadsOfUser(@Query("userId") userId: string, @Query("current") current: string, @Query("limit") limit: number) {
+		const threads = await this.mongodbService.findThreadOfUser(userId, current, limit ?? 10);
 		if(!threads) {
 			throw new HttpException("Threads not found", HttpStatus.NOT_FOUND);
 		} 
@@ -672,11 +694,22 @@ export class UserControllerV2 {
 	}
 
 	@HttpCode(HttpStatus.OK)
-	@Get("message/add-reaction")
+	@Public()
+	@Get("message/get-user")
+	async getMessagesOfUser(@Query("userId") userId: string, @Query("current") current: string, @Query("limit") limit: number) {
+		const messages = await this.mongodbService.findMessageOfUser(userId, current, limit ?? 10);
+		if(!messages) {
+			throw new HttpException("Messages not found", HttpStatus.NOT_FOUND);
+		} 
+		return messages;
+	}
+
+	@HttpCode(HttpStatus.OK)
+	@Get("message/react")
 	async addReactionToMessage(@Req() req, @Query("messageId") messageId: string, @Query("type") type: string) {
 		const result = await this.mongodbService.addReactionToMessage(messageId, req.user.id, type);
 		if(!result) {
-			throw new HttpException("Error adding reaction to message", HttpStatus.BAD_REQUEST);
+			throw new HttpException("Error reacting to message", HttpStatus.BAD_REQUEST);
 		}
 		return {
 			message: "Added a reaction to message",
@@ -684,16 +717,142 @@ export class UserControllerV2 {
 		}
 	}
 
+
+
+
+
+
+
+
+
+	/* Reactions model API
+	-----------------------------------------------------------
+	-----------------------------------------------------------
+	-----------------------------------------------------------
+	-----------------------------------------------------------
+	-----------------------------------------------------------
+	*/
+
 	@HttpCode(HttpStatus.OK)
-	@Get("message/remove-reaction")
-	async removeReactionToMessage(@Req() req, @Query("messageId") messageId: string) {
-		const result = this.mongodbService.removeReactionOfMessage(messageId, req.user.id);
-		if(!result) {
-			throw new HttpException("Error removing reaction from message", HttpStatus.BAD_REQUEST);
+	@Public()
+	@Get("reaction/get")
+	async findReaction(@Query('reactionId') reactionId: string, @Query('userId') userId: string, @Query('messageId') messageId: string) {
+		if(reactionId) {
+			const reaction = await this.mongodbService.getReactionById(reactionId);
+			if(!reaction) {
+				throw new HttpException("Reaction not found", HttpStatus.BAD_REQUEST);
+			}
+			return reaction;
+		}
+
+		if(!userId || !messageId) {
+			throw new HttpException("UserId or MessageId is not provided", HttpStatus.BAD_REQUEST);
+		}
+
+		const reaction = await this.mongodbService.getReaction(userId, messageId);
+		if(!reaction) {
+			throw new HttpException("Reaction not found", HttpStatus.BAD_REQUEST);
+		}
+		return reaction;
+	}
+
+	@HttpCode(HttpStatus.OK)
+	@Public()
+	@Get("reaction/get-many")
+	async findReactions(@Query('messageId') messageId: string, @Query('current') current: string, @Query('limit') limit: number) {
+		if(!messageId) {
+			throw new HttpException("MessageId is not provided", HttpStatus.BAD_REQUEST);
+		}
+
+		const reactions = await this.mongodbService.getReactionsOfMessage(messageId, current, limit);
+		if(!reactions) {
+			throw new HttpException("Reactions not found", HttpStatus.BAD_REQUEST);
+		}
+		return reactions;
+	}
+
+
+
+
+
+
+
+
+
+
+
+
+
+	/* ProfilePosting model API
+	-----------------------------------------------------------
+	-----------------------------------------------------------
+	-----------------------------------------------------------
+	-----------------------------------------------------------
+	-----------------------------------------------------------
+	*/
+
+	@HttpCode(HttpStatus.OK)
+	@Post("profileposting/add")
+	async createProfilePosting(@Body() body: CreateProfilePosting) {
+		const profilePosting = await this.mongodbService.createProfilePosting(body.userId, body.userWallId, body.message);
+		if(!profilePosting) {
+			throw new HttpException("Error creating new profile posting", HttpStatus.BAD_REQUEST);
 		}
 		return {
-			message: "Removed reaction from message",
-			item: result
+			message: "Created new profile posting",
+			item: profilePosting
 		}
+	}
+
+	@HttpCode(HttpStatus.OK)
+	@Public()
+	@Get("profileposting/get")
+	async getProfilePosting(@Query("userWallId") userWallId: string, @Query("current") current: string, @Query("limit") limit: number) {
+		const profilePostings = await this.mongodbService.findProfilePosting(userWallId, current, limit ?? 20);
+		if(!profilePostings) {
+			throw new HttpException("Error finding profile postings", HttpStatus.BAD_REQUEST);
+		}
+		return {
+			message: "Get profile posting successfully",
+			item: profilePostings
+		}
+	}
+
+
+
+
+
+
+
+
+
+
+
+
+	/* Alert model API
+	-----------------------------------------------------------
+	-----------------------------------------------------------
+	-----------------------------------------------------------
+	-----------------------------------------------------------
+	-----------------------------------------------------------
+	*/
+
+	@HttpCode(HttpStatus.OK)
+	@Public()
+	@Get("alert/get")
+	async getAlert(@Query('alertId') alertId: string, @Query('userId') userId: string, @Query('current') current: string, @Query('limit') limit: number) {
+		if(alertId) {
+			const alert = await this.mongodbService.findAlertById(alertId);
+			if(!alert) {
+				throw new HttpException("Alert not found", HttpStatus.BAD_REQUEST);
+			}
+			return alert;
+		}
+
+		const alerts = await this.mongodbService.findAlerts(userId, current, limit);
+		if(!alerts) {
+			throw new HttpException("Alerts not found", HttpStatus.BAD_REQUEST);
+		}
+		return alerts;
 	}
 }

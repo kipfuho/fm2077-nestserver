@@ -294,4 +294,32 @@ export class MongodbController {
 		}
 		return message;
 	}
+
+
+
+
+
+
+
+
+
+
+
+
+
+	/* Alert
+	-----------------------------------------------------------
+	-----------------------------------------------------------
+	-----------------------------------------------------------
+	-----------------------------------------------------------
+	-----------------------------------------------------------
+	*/
+
+	@HttpCode(HttpStatus.OK)
+	@Public()
+	@Post("alert/create")
+	async createAlert(@Body() body) {
+		const alert = await this.mongodbService.createAlert(body.userId, body.detail);
+		return alert;
+	}
 }

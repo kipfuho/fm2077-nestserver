@@ -15,6 +15,8 @@ import { MailService } from 'src/mail/mail.service';
 import { Alert, AlertDocument } from './schema/alert.schema';
 import { Bookmark, BookmarkDocument } from './schema/bookmark.schema';
 import { Rating, RatingDocument } from './schema/rating.schema';
+import { ProfilePosting, ProfilePostingDocument } from './schema/profileposting.schema';
+import { Report } from './schema/report.schema';
 
 @Injectable()
 export class MongodbService {
@@ -26,9 +28,11 @@ export class MongodbService {
 		@InjectModel(Message.name) private readonly messageModel: Model<Message>,
 		@InjectModel(Reaction.name) private readonly reactionModel: Model<Reaction>,
 		@InjectModel(Tag.name) private readonly tagModel: Model<Tag>,
-		@InjectModel(Tag.name) private readonly alertModel: Model<Alert>,
-		@InjectModel(Tag.name) private readonly bookmarkModel: Model<Bookmark>,
-		@InjectModel(Tag.name) private readonly ratingModel: Model<Rating>,
+		@InjectModel(Alert.name) private readonly alertModel: Model<Alert>,
+		@InjectModel(Bookmark.name) private readonly bookmarkModel: Model<Bookmark>,
+		@InjectModel(Rating.name) private readonly ratingModel: Model<Rating>,
+		@InjectModel(ProfilePosting.name) private readonly profilepostingModel: Model<ProfilePosting>,
+		@InjectModel(Report.name) private readonly reportModel: Model<Report>,
 		@Inject(CACHE_MANAGER) private readonly cacheManager: RedisCache,
 		private readonly mailService: MailService
 	) {}
@@ -63,7 +67,7 @@ export class MongodbService {
 			]);
 			return [threadCount, messageCount, memberCount, lastMember.username];
 		} catch(err) {
-			this.logger.error(err);
+			this.logger.error("getMetadata:::", err);
 			return null;
 		}
 	}
@@ -83,7 +87,7 @@ export class MongodbService {
 		try {
 			const [check1, check2] = await Promise.all([this.findUserByName(username), this.findUserByName(email)])
 			if(check1 || check2) {
-				this.logger.log("Username or email exist");
+				this.logger.log("createUser:::Username or email exist");
 				return null;
 			}
 			const time = new Date();
@@ -104,7 +108,7 @@ export class MongodbService {
 					twofa: false,
 				}
 			});
-			this.logger.log(`Created a new user, id:${user._id.toHexString()}`);
+			this.logger.log(`createUser:::Created a new user, id:${user._id.toHexString()}`);
 			// create alert for email verification
 			await this.createAlert(
 				user._id.toHexString(),
@@ -112,7 +116,7 @@ export class MongodbService {
 			);
 			return user;
 		} catch(err) {
-			this.logger.error(err);
+			this.logger.error("createUser:::", err);
 			return null;
 		}
 	}
@@ -122,7 +126,7 @@ export class MongodbService {
 		try {
 			const cache: UserDocument = await this.cacheManager.get(`user:${id}`);
 			if(cache) {
-				this.logger.log(`CACHE:::Found user:${id}`);
+				this.logger.log(`findUserById:::CACHE:::Found user:${id}`);
 				return {cache: true, user: cache};
 			}
 
@@ -130,10 +134,10 @@ export class MongodbService {
 			if(user) {
 				await this.cacheManager.set(`user:${user._id.toHexString()}`, user.toObject(), this.CACHE_TIME);
 			}
-			this.logger.log(`DB:::Found user:${user}`);
+			this.logger.log(`findUserById:::DB:::Found user:${user}`);
 			return {cache: false, user: user};
 		} catch(err) {
-			this.logger.error(err);
+			this.logger.error("findUserById:::", err);
 			return null;
 		}
 	}
@@ -147,10 +151,10 @@ export class MongodbService {
 					{email: identity}
 				]
 			}).exec();
-			this.logger.log(`DB:::Found user:${user}`);
+			this.logger.log(`findUserByName:::DB:::Found user:${user}`);
 			return user;
 		} catch(err) {
-			this.logger.error(err);
+			this.logger.error("findUserByName:::", err);
 			return null;
 		}
 	}
@@ -163,11 +167,11 @@ export class MongodbService {
 		try {
 			const userData = await this.findUserById(userId);
 			if(!userData || !userData.user) {
-				this.logger.log("User not found");
+				this.logger.log("editUsernameUser:::User not found");
 				return null;
 			}
 			if(userData.user.password !== password) {
-				this.logger.log("Password not match");
+				this.logger.log("editUsernameUser:::Password not match");
 				return null;
 			}
 
@@ -175,9 +179,9 @@ export class MongodbService {
 			if(userData.cache) {
 				this.cacheManager.set(`user:${userId}`, updatedUser, this.CACHE_TIME);
 			}
-			this.logger.log(`Updated username of user:${userId}`);
+			this.logger.log(`editUsernameUser:::Updated username of user:${userId}`);
 		} catch(err) {
-			this.logger.error(err);
+			this.logger.error("editUsernameUser:::", err);
 			return null;
 		}
 	}
@@ -186,11 +190,11 @@ export class MongodbService {
 		try {
 			const userData = await this.findUserById(userId);
 			if(!userData || !userData.user) {
-				this.logger.log("User not found");
+				this.logger.log("editEmailUser:::User not found");
 				return null;
 			}
 			if(userData.user.password !== password) {
-				this.logger.log("Password not match");
+				this.logger.log("editEmailUser:::Password not match");
 				return null;
 			}
 
@@ -198,9 +202,9 @@ export class MongodbService {
 			if(userData.cache) {
 				this.cacheManager.set(`user:${userId}`, updatedUser, this.CACHE_TIME);
 			}
-			this.logger.log(`Updated email of user:${userId}`);
+			this.logger.log(`editEmailUser:::Updated email of user:${userId}`);
 		} catch(err) {
-			this.logger.error(err);
+			this.logger.error("editEmailUser:::", err);
 			return null;
 		}
 	}
@@ -209,11 +213,11 @@ export class MongodbService {
 		try {
 			const userData = await this.findUserById(userId);
 			if(!userData || !userData.user) {
-				this.logger.log("User not found");
+				this.logger.log("editUserSetting:::User not found");
 				return null;
 			}
 			if(userData.user.password !== password) {
-				this.logger.log("Password not match");
+				this.logger.log("editUserSetting:::Password not match");
 				return null;
 			}
 
@@ -232,9 +236,9 @@ export class MongodbService {
 			if(userData.cache) {
 				this.cacheManager.set(`user:${userId}`, updatedUser, this.CACHE_TIME);
 			}
-			this.logger.log(`Updated information of user:${userId}`);
+			this.logger.log(`editUserSetting:::Updated information of user:${userId}`);
 		} catch(err) {
-			this.logger.error(err);
+			this.logger.error("editUserSetting:::", err);
 			return null;
 		}
 	}
@@ -243,12 +247,12 @@ export class MongodbService {
 		try {
 			const userData = await this.findUserById(userId);
 			if(!userData || !userData.user) {
-				this.logger.log("User not found");
+				this.logger.log("editPasswordUser:::User not found");
 				return null;
 			}
 
 			if(userData.user.password !== oldPassword) {
-				this.logger.log("Password not match");
+				this.logger.log("editPasswordUser:::Password not match");
 				return null;
 			}
 
@@ -256,9 +260,9 @@ export class MongodbService {
 			if(userData.cache) {
 				this.cacheManager.set(`user:${userId}`, updatedUser, this.CACHE_TIME);
 			}
-			this.logger.log(`Updated password of user:${userId}`);
+			this.logger.log(`editPasswordUser:::Updated password of user:${userId}`);
 		} catch(err) {
-			this.logger.error(err);
+			this.logger.error("editPasswordUser:::", err);
 			return null;
 		}
 	}
@@ -267,21 +271,21 @@ export class MongodbService {
 		try {
 			const userData = await this.findUserById(userId);
 			if(!userData || !userData.user) {
-				this.logger.log("User not found");
+				this.logger.log("createVerifyCode:::User not found");
 				return null;
 			}
 			if(userData.user.class > 0) {
-				this.logger.log("User email has been verified");
+				this.logger.log("createVerifyCode:::User email has been verified");
 				return null;
 			}
 			
 			const code = SHA256(userId).toString(enc.Hex);
 			await this.cacheManager.set(`user:${userId}:verifyCode`, code, 30*60000); // 30 minutes
 			this.mailService.sendUserConfirmation(userData.user, code);
-			this.logger.log("Created verify code");
+			this.logger.log("createVerifyCode:::Created verify code");
 			return code;
 		} catch(err) {
-			this.logger.error(err);
+			this.logger.error("createVerifyCode:::", err);
 			return null;
 		}
 	}
@@ -290,13 +294,13 @@ export class MongodbService {
 		try {
 			const userData = await this.findUserById(userId);
 			if(!userData || !userData.user) {
-				this.logger.log("User not found");
+				this.logger.log("verifyEmail:::User not found");
 				return null;
 			}
 
 			const cacheCode = await this.cacheManager.get(`user:${userId}:verifyCode`);
 			if(cacheCode !== code) {
-				this.logger.log("Code not match");
+				this.logger.log("verifyEmail:::Code not match");
 				return null;
 			}
 
@@ -308,7 +312,7 @@ export class MongodbService {
 			
 			return _user;
 		} catch(err) {
-			this.logger.error(err);
+			this.logger.error("verifyEmail:::", err);
 			return null;
 		}
 	}
@@ -342,10 +346,10 @@ export class MongodbService {
 				about,
 				forums: []
 			});
-			this.logger.log(`Created new category, id=${category._id.toHexString()}`);
+			this.logger.log(`createCategory:::Created new category, id=${category._id.toHexString()}`);
 			return category;
 		} catch(err) {
-			this.logger.error(err);
+			this.logger.error("createCategory:::", err);
 			return null;
 		}
 	}
@@ -355,7 +359,7 @@ export class MongodbService {
 		try {
 			const cache: CategoryDocument = await this.cacheManager.get(`category:${id}`);
 			if(cache) {
-				this.logger.log(`CACHE:::Found category:${id}`);
+				this.logger.log(`findCategoryById:::CACHE:::Found category:${id}`);
 				return {cache: true, category: cache};
 			}
 
@@ -363,10 +367,10 @@ export class MongodbService {
 			if(category) {
 				await this.cacheManager.set(`category:${id}`, category.toObject(), this.CACHE_TIME);
 			}
-			this.logger.log(`DB:::Found category:${category}`);
+			this.logger.log(`findCategoryById:::DB:::Found category:${category}`);
 			return {cache: false, category};
 		} catch(err) {
-			this.logger.error(err);
+			this.logger.error("findCategoryById:::", err);
 			return null;
 		}
 	}
@@ -374,10 +378,10 @@ export class MongodbService {
 	async findAllCategory(): Promise<CategoryDocument[]> {
 		try {
 			const categories = await this.categoryModel.find().exec();
-			this.logger.log("DB:::Found all categories");
+			this.logger.log("findAllCategory:::DB:::Found all categories");
 			return categories;
 		} catch(err) {
-			this.logger.error(err);
+			this.logger.error("findAllCategory:::", err);
 			return null;
 		}
 	}
@@ -386,13 +390,13 @@ export class MongodbService {
 		try {
 			const [forumData, categoryData] = await Promise.all([this.findForumById(forumId), this.findCategoryById(categoryId)]);
 			if(!forumData.forum || !categoryData.category) {
-				this.logger.log("Category or forum not found");
+				this.logger.log("addForumToCategory:::Category or forum not found");
 				return null;
 			}
-			this.logger.log(`Added forum:${forumId} to category:${categoryId}`);
+			this.logger.log(`addForumToCategory:::Added forum:${forumId} to category:${categoryId}`);
 			return await this.categoryModel.findByIdAndUpdate(categoryId, {$push: {forums: forumId}}, {new: true}).exec();
 		} catch(err) {
-			this.logger.error(err);
+			this.logger.error("addForumToCategory:::", err);
 			return null;
 		}
 	}
@@ -442,10 +446,10 @@ export class MongodbService {
 					delete: 3
 				},
 			});
-			this.logger.log(`Created a new forum, id=${forum._id.toHexString()}`);
+			this.logger.log(`createForum:::Created a new forum, id=${forum._id.toHexString()}`);
 			return forum;
 		} catch(err) {
-			this.logger.error(err);
+			this.logger.error("createForum:::", err);
 			return null;
 		}
 	}
@@ -455,7 +459,7 @@ export class MongodbService {
 		try {
 			const cache: ForumDocument = await this.cacheManager.get(`forum:${forumId}`);
 			if(cache) {
-				this.logger.log(`CACHE:::Found forum:${forumId}`);
+				this.logger.log(`findForumById:::CACHE:::Found forum:${forumId}`);
 				return {cache: true, forum: cache};
 			}
 
@@ -463,10 +467,10 @@ export class MongodbService {
 			if(forum) {
 				await this.cacheManager.set(`forum:${forumId}`, forum, this.CACHE_TIME);
 			}
-			this.logger.log(`DB:::Found forum:${forum}`);
+			this.logger.log(`findForumById:::DB:::Found forum:${forum}`);
 			return {cache: false, forum: forum};
 		} catch(err) {
-			this.logger.error(err);
+			this.logger.error("findForumById:::", err);
 			return null;
 		}
 	}
@@ -503,7 +507,7 @@ export class MongodbService {
 		try {
 			const [forumData, userData] = await Promise.all([this.findForumById(forumId), this.findUserById(userId)]);
 			if(!userData || !userData.user || !forumData || !forumData.forum) {
-				this.logger.log("Forum or user not found");
+				this.logger.log("createThread:::Forum or user not found");
 				return null;
 			}
 			const time = new Date();
@@ -523,14 +527,14 @@ export class MongodbService {
 			if(forumData.cache) {
 				this.cacheManager.set(`forum:${forumId}`, forum);
 			}
-			this.logger.log(`Created a new thread, id=${thread._id.toHexString()}`);
+			this.logger.log(`createThread:::Created a new thread, id=${thread._id.toHexString()}`);
 			// populate alert for followers
 			userData.user.followers.forEach(follower => {
 				this.createAlert(follower, `<user>${userId}</user> posted a new thread <thread>${thread._id}</thread>`)
 			});
 			return thread;
 		} catch(err) {
-			this.logger.error(err);
+			this.logger.error("createThread:::", err);
 			return null;
 		}
 	}
@@ -539,13 +543,13 @@ export class MongodbService {
 		try {
 			const [thread, tag] = await Promise.all([this.findThreadById(threadId), this.findTagById(tagId)]);
 			if(!thread || !thread.thread || !tag || !tag.tag) {
-				this.logger.log("Thread or tag not found");
+				this.logger.log("addExistTagToThread:::Thread or tag not found");
 				return null;
 			}
-			this.logger.log(`Added tag:${tagId} to thread:${threadId}`);
+			this.logger.log(`addExistTagToThread:::Added tag:${tagId} to thread:${threadId}`);
 			return await this.threadModel.findByIdAndUpdate(threadId, {$push: {tag: tag.tag}}, {new: true}).exec();
 		} catch(err) {
-			this.logger.error(err);
+			this.logger.error("addExistTagToThread:::", err);
 			return null;
 		}
 	}
@@ -554,13 +558,13 @@ export class MongodbService {
 		try {
 			const thread = await this.findThreadById(threadId);
 			if(!thread || !thread.thread) {
-				this.logger.log("Thread not found");
+				this.logger.log("addNewTagToThread:::Thread not found");
 				return null;
 			}
-			this.logger.log(`Added tag:${tagName} to thread:${threadId}`);
+			this.logger.log(`addNewTagToThread:::Added tag:${tagName} to thread:${threadId}`);
 			return await this.threadModel.findByIdAndUpdate(threadId, {$push: {tag: new Tag(tagName, "#cecece")}}, {new: true}).exec();
 		} catch(err) {
-			this.logger.error(err);
+			this.logger.error("addNewTagToThread:::", err);
 			return null;
 		}
 	}
@@ -574,7 +578,7 @@ export class MongodbService {
 					cache.views++;
 					await this.cacheManager.set(`thread:${threadId}`, cache, this.CACHE_TIME);
 				}
-				this.logger.log(`CACHE:::Found thread:${threadId}`);
+				this.logger.log(`findThreadById:::CACHE:::Found thread:${threadId}`);
 				return {cache: true, thread: cache};
 			}
 
@@ -583,29 +587,47 @@ export class MongodbService {
 				if(thread) {
 					await this.cacheManager.set(`thread:${threadId}`, thread.toObject(), this.CACHE_TIME);
 				}
-				this.logger.log(`DB:::Found thread:${thread}`);
+				this.logger.log(`findThreadById:::DB:::Found thread:${thread}`);
 				return {cache: false, thread: thread};
 			} else {
 				const thread = await this.threadModel.findById(threadId).exec();
 				if(thread) {
 					await this.cacheManager.set(`thread:${threadId}`, thread.toObject(), this.CACHE_TIME);
 				}
-				this.logger.log(`DB:::Found thread:${thread}`);
+				this.logger.log(`findThreadById:::DB:::Found thread:${thread}`);
 				return {cache: false, thread: thread};
 			}
 		} catch(err) {
-			this.logger.error(err);
+			this.logger.error("findThreadById:::", err);
 			return null;
 		}
 	}
 
+	// find by offset and limit
 	async findThread(forumId: string, offset: number, limit: number): Promise<ThreadDocument[]> {
 		try {
 			const threads = await this.threadModel.find({forum: forumId}).skip(offset).limit(limit).exec();
-			this.logger.log(`DB:::Found threads:${threads}`);
+			this.logger.log(`findThread:::DB:::Found threads:${threads}`);
 			return threads;
 		} catch(err) {
-			this.logger.error(err);
+			this.logger.error("findThread:::", err);
+			return null;
+		}
+	}
+
+	// find by _id
+	async findThreadOfUser(userId: string, current: string, limit: number): Promise<ThreadDocument[]> {
+		try {
+			let threads: ThreadDocument[];
+			if(current) {
+				threads = await this.threadModel.find({user: userId, _id: {$lt: current}}).limit(limit).exec();
+			} else {
+				threads = await this.threadModel.find({user: userId}).sort({update_time: -1}).limit(limit).exec();
+			}
+			this.logger.log(`findThreadOfUser:::DB:::Found threads:${threads}`);
+			return threads;
+		} catch(err) {
+			this.logger.error("findThreadOfUser:::", err);
 			return null;
 		}
 	}
@@ -613,10 +635,10 @@ export class MongodbService {
 	async findLastestThread(forumId: string): Promise<ThreadDocument> {
 		try {
 			const thread = await this.threadModel.findOne({forum: forumId}).sort({create_time: -1}).exec();
-			this.logger.log(`DB:::Found lastest thread:${thread}`);
+			this.logger.log(`findLastestThread:::DB:::Found lastest thread:${thread}`);
 			return thread;
 		} catch(err) {
-			this.logger.error(err);
+			this.logger.error("findLastestThread:::", err);
 			return null;
 		}
 	}
@@ -632,10 +654,10 @@ export class MongodbService {
 			if(threadContent) {
 				await this.messageModel.updateOne({thread: threadId}, {content: threadContent, update_time: time}).exec();
 			}
-			this.logger.log(`Updated thread, id=${threadId}`);
+			this.logger.log(`editThread:::Updated thread, id=${threadId}`);
 			return thread;
 		} catch(err) {
-			this.logger.error(err);
+			this.logger.error("editThread:::", err);
 			return null;
 		}
 	}
@@ -665,7 +687,7 @@ export class MongodbService {
 		try {
 			const [threadData, userData] = await Promise.all([this.findThreadById(threadId), this.findUserById(userId)]);
 			if(!threadData || !threadData.thread || !userData || !userData.user) {
-				this.logger.log("Thread or user not found");
+				this.logger.log("createMessage:::Thread or user not found");
 				return null;
 			}
 			const time = new Date();
@@ -677,13 +699,13 @@ export class MongodbService {
 				update_time: time,
 				attachments: attachments ?? [],
 				reactions: {
-					'like': [],
-					'love': [],
-					'care': [],
-					'haha': [],
-					'wow': [],
-					'sad': [],
-					'angry': []
+					like: 0,
+					love: 0,
+					care: 0,
+					haha: 0,
+					wow: 0,
+					sad: 0,
+					angry: 0
 				},
 				delete: false
 			});
@@ -692,10 +714,10 @@ export class MongodbService {
 				this.threadModel.updateOne({_id: threadId}, {$inc: {replies: 1}}),
 				this.userModel.updateOne({_id: userData.user._id}, {$inc: {messages: 1}})
 			]);
-			this.logger.log(`Created new message, id=${message._id.toHexString()}`);
+			this.logger.log(`createMessage:::Created new message, id=${message._id.toHexString()}`);
 			return message;
 		} catch(err) {
-			this.logger.error(err);
+			this.logger.error("createMessage:::", err);
 			return null;
 		}
 	}
@@ -705,7 +727,7 @@ export class MongodbService {
 		try {
 			const cache: MessageDocument = await this.cacheManager.get(`message:${messageId}`);
 			if(cache) {
-				this.logger.log(`CACHE:::Found message:${messageId}`);
+				this.logger.log(`findMessageById:::CACHE:::Found message:${messageId}`);
 				return {cache: true, message: cache};
 			}
 
@@ -713,75 +735,10 @@ export class MongodbService {
 			if(message) {
 				await this.cacheManager.set(`message:${messageId}`, message.toObject(), this.CACHE_TIME);
 			}
-			this.logger.log(`DB:::Found message:${message}`);
+			this.logger.log(`findMessageById:::DB:::Found message:${message}`);
 			return {cache: false, message: message};
 		} catch(err) {
-			this.logger.error(err);
-			return null;
-		}
-	}
-
-	async addReactionToMessage(messageId: string,  userId: string, type: string): Promise<MessageDocument> {
-		try {
-			const [messageData, userData, reaction] = await Promise.all([
-				this.findMessageById(messageId), 
-				this.findUserById(userId),
-				this.reactionModel.findOne({message: messageId, user: userId}).exec()
-			]);
-			if(!messageData || !messageData.message || !userData || !userData.user) {
-				this.logger.log("User or message not found");
-				return null;
-			}
-			if(reaction) {
-				this.logger.log("Duplicate reaction on a message");
-				return null;
-			}
-
-			const newReaction = await this.createReaction(messageId, userId, type);
-			this.logger.log(`Added a ${type} by user:${userId} to message:${messageId}`);
-			const [newMessage, newUser] = await Promise.all([
-				this.messageModel.findByIdAndUpdate(messageId, {$push: {[`reactions.${type}`]: newReaction._id.toHexString()}}, {new: true}).exec(), 
-				this.userModel.updateOne({_id: messageData.message.user}, {$inc: {likes: 1}}).exec()
-			]);
-			await Promise.all([
-				this.cacheManager.set(`message:${messageId}`, newMessage, this.CACHE_TIME),
-				this.cacheManager.set(`user:${messageData.message.user}`, newUser)
-			]);
-			return newMessage;
-		} catch(err) {
-			this.logger.error(err);
-			return null;
-		}
-	}
-
-	async removeReactionOfMessage(messageId: string,  userId: string): Promise<MessageDocument> {
-		try {
-			const [messageData, userData, reaction] = await Promise.all([
-				this.findMessageById(messageId), 
-				this.findUserById(userId),
-				this.reactionModel.findOne({message: messageId, user: userId}).exec()
-			]);
-			if(!messageData || !messageData.message || !userData || !userData.user) {
-				this.logger.log("Message or User not found");
-				return null;
-			}
-			if(!reaction) {
-				this.logger.log("Reaction not found");
-				return null;
-			}
-
-			const [message, user, _] = await Promise.all([
-				this.messageModel.findByIdAndUpdate(messageId, {$pull: {reactions: reaction._id.toHexString()}}, {new: true}).exec(),
-				this.userModel.findByIdAndUpdate(messageData.message.user, {$inc: {likes: -1}}, {new: true}).exec(),
-				this.reactionModel.deleteOne({_id: reaction._id}).exec()
-			]);
-			await Promise.all([
-				this.cacheManager.set(`message:${messageId}`, message, this.CACHE_TIME),
-				this.cacheManager.set(`user:${messageData.message.user}`, user, this.CACHE_TIME)
-			]);
-			return message;
-		} catch(err) {
-			this.logger.error(err);
+			this.logger.error("findMessageById:::", err);
 			return null;
 		}
 	}
@@ -789,10 +746,10 @@ export class MongodbService {
 	async findLastestMessage(threadId: string): Promise<MessageDocument> {
 		try {
 			const message = await this.messageModel.findOne({thread: threadId}).sort({create_time: -1}).exec();
-			this.logger.log(`DB:::Found lastest message:${message}`);
+			this.logger.log(`findLastestMessage:::DB:::Found lastest message:${message}`);
 			return message;
 		} catch(err) {
-			this.logger.error(err);
+			this.logger.error("findLastestMessage:::", err);
 			return null;
 		}
 	}
@@ -804,10 +761,27 @@ export class MongodbService {
 	async findMessage(threadId: string, offset: number, limit: number): Promise<MessageDocument[]> {
 		try {
 			const messages = await this.messageModel.find({thread: threadId}).skip(offset).limit(limit).exec();
-			this.logger.log(`DB:::Found messages:${messages}`);
+			this.logger.log(`findMessage:::DB:::Found messages:${messages}`);
 			return messages;
 		} catch(err) {
-			this.logger.error(err);
+			this.logger.error("findMessage:::", err);
+			return null;
+		}
+	}
+
+	// find by _id
+	async findMessageOfUser(userId: string, current: string, limit: number): Promise<MessageDocument[]> {
+		try {
+			let messages: MessageDocument[];
+			if(current) {
+				messages = await this.messageModel.find({user: userId, _id: {$lt: current}}).limit(limit).exec();
+			} else {
+				messages = await this.messageModel.find({user: userId}).sort({create_time: -1}).limit(limit).exec();
+			}
+			this.logger.log(`findMessageOfUser:::DB:::Found messages:${messages}`);
+			return messages;
+		} catch(err) {
+			this.logger.error("findMessageOfUser:::", err);
 			return null;
 		}
 	}
@@ -815,10 +789,10 @@ export class MongodbService {
 	async editMessage(messageId: string, content: string): Promise<MessageDocument> {
 		try {
 			const message = this.messageModel.findByIdAndUpdate(messageId, {content: content}, {new: true}).exec();
-			this.logger.log(`Updated message, id=${messageId}`);
+			this.logger.log(`editMessage:::Updated message, id=${messageId}`);
 			return message;
 		} catch(err) {
-			this.logger.error(err);
+			this.logger.error("editMessage:::", err);
 			return null;
 		}
 	}
@@ -827,7 +801,7 @@ export class MongodbService {
 		try {
 			const messageData = await this.findMessageById(messageId);
 			if(!messageData || !messageData.message) {
-				this.logger.log("Message not found");
+				this.logger.log("addAttachment:::Message not found");
 				return null;
 			}
 
@@ -841,7 +815,7 @@ export class MongodbService {
 				return _message;
 			}
 		} catch(err) {
-			this.logger.error(err);
+			this.logger.error("addAttachment:::", err);
 			return null;
 		}
 	}
@@ -877,10 +851,10 @@ export class MongodbService {
 				name,
 				color
 			});
-			this.logger.log(`Created new tag, id=${tag._id.toHexString()}`);
+			this.logger.log(`createTag:::Created new tag, id=${tag._id.toHexString()}`);
 			return tag;
 		} catch(err) {
-			this.logger.error(err);
+			this.logger.error("createTag:::", err);
 			return null;
 		}
 	}
@@ -890,7 +864,7 @@ export class MongodbService {
 		try {
 			const cache: TagDocument = await this.cacheManager.get(`tag:${tagId}`);
 			if(cache) {
-				this.logger.log(`CACHE:::Found tag:${tagId}`);
+				this.logger.log(`findTagById:::CACHE:::Found tag:${tagId}`);
 				return {cache: true, tag: cache};
 			}
 
@@ -898,10 +872,10 @@ export class MongodbService {
 			if(tag) {
 				await this.cacheManager.set(`tag:${tagId}`, tag, this.CACHE_TIME);
 			}
-			this.logger.log(`DB:::Found tag:${tag}`);
+			this.logger.log(`findTagById:::DB:::Found tag:${tag}`);
 			return {cache: false, tag: tag};
 		} catch(err) {
-			this.logger.error(err);
+			this.logger.error("findTagById:::", err);
 			return null;
 		}
 	}
@@ -942,10 +916,10 @@ export class MongodbService {
 				type,
 				create_time: time
 			});
-			this.logger.log(`Created new reaction, id=${reaction._id.toHexString()}`);
+			this.logger.log(`createReaction:::Created new reaction, id=${reaction._id.toHexString()}`);
 			return reaction;
 		} catch(err) {
-			this.logger.error(err);
+			this.logger.error(`createReaction:::${err}`);
 			return null;
 		}
 	}
@@ -954,7 +928,7 @@ export class MongodbService {
 		try {
 			const cache: ReactionDocument = await this.cacheManager.get(`reaction:${reactionId}`);
 			if(cache) {
-				this.logger.log(`CACHE:::Found reaction:${reactionId}`);
+				this.logger.log(`getReactionById:::CACHE:::Found reaction:${reactionId}`);
 				return {cache: true, reaction: cache};
 			}
 
@@ -962,10 +936,125 @@ export class MongodbService {
 			if(reaction) {
 				await this.cacheManager.set(`reaction:${reactionId}`, reaction, this.CACHE_TIME);
 			}
-			this.logger.log(`DB:::Found reaction:${reaction}`);
+			this.logger.log(`getReactionById:::DB:::Found reaction:${reaction}`);
 			return {cache: false, reaction: reaction};
 		} catch(err) {
-			this.logger.error(err);
+			this.logger.error(`getReactionById:::${err}`);
+			return null;
+		}
+	}
+
+	async getReaction(userId: string, messageId: string): Promise<ReactionDocument> {
+		try {
+			const reaction = await this.reactionModel.findOne({user: userId, message: messageId});
+			this.logger.log(`getReaction:::DB:::Found reaction:${reaction}`);
+			return reaction;
+		} catch(err) {
+			this.logger.error(`getReaction:::${err}`);
+			return null;
+		}
+	}
+
+	async getReactionsOfMessage(messageId: string, current: string = null, limit: number = 3): Promise<Array<{reaction: ReactionDocument, user: any}>> {
+		try {
+			const messageData = await this.findMessageById(messageId);
+			if(!messageData || !messageData.message) {
+				this.logger.log("Message not found");
+				return null;
+			}
+
+			let reactions: ReactionDocument[];
+			if(current) {
+				reactions = await this.reactionModel.find({message: messageId}, {_id: {$lt: current}}).limit(limit).exec();
+			} else {
+				reactions = await this.reactionModel.find({message: messageId}).sort({create_time: -1}).limit(limit).exec();
+			}
+			this.logger.log(`getReactionsOfMessage:::DB:::Found reactions:${reactions}`);
+			
+			let result: Array<{reaction: ReactionDocument, user: any}> = [];
+			await Promise.all(reactions.map(async (reaction) => {
+				let userData = await this.findUserById(reaction.user);
+				if(!userData || !userData.user) {
+					this.logger.log(`getReactionsOfMessage:::User not found`);
+				} else {
+					if(userData.cache) {
+						const { email, password, setting, ...nonSensitive } = userData.user;
+						result.push({reaction, user: nonSensitive});
+					} else {
+						const { email, password, setting, ...nonSensitive } = userData.user.toObject();
+						result.push({reaction, user: nonSensitive});
+					}
+				}
+			}))
+			this.logger.log(`getReactionsOfMessage:::Found users associated with reactions`);
+			return result;
+		} catch(err) {
+			console.error(`getReactionsOfMessage:::${err}`);
+			return null;
+		}
+	}
+
+	async addReactionToMessage(messageId: string, userId: string, type: string): Promise<{message: MessageDocument, reaction: ReactionDocument}> {
+		try {
+			const [messageData, userData, reaction] = await Promise.all([
+				this.findMessageById(messageId), 
+				this.findUserById(userId),
+				this.reactionModel.findOne({message: messageId, user: userId}).exec()
+			]);
+			if(!messageData || !messageData.message || !userData || !userData.user) {
+				this.logger.log("addReactionToMessage:::User or message not found");
+				return null;
+			}
+			// If user has already reacted the post
+			// We can try to change reaction type, or delete it
+			if(reaction) {
+				// Delete it if of same type
+				if(reaction.type === type) {
+					const [_, updatedMessage, updatedUser] = await Promise.all([
+						this.reactionModel.deleteOne({_id: reaction._id}),
+						this.messageModel.findByIdAndUpdate(messageId, {$inc: {[`reactions.${type}`]: -1}}, {new: true}),
+						this.userModel.findByIdAndUpdate(messageData.message.user, {$inc: {likes: -1}}, {new: true})
+					])
+					await Promise.all([
+						this.cacheManager.set(`message:${messageId}`, updatedMessage),
+						this.cacheManager.set(`user:${updatedUser._id}`, updatedUser, this.CACHE_TIME)
+					]);
+					this.logger.log("addReactionToMessage:::Deleted duplicated reaction on a message");
+					return {
+						message: updatedMessage,
+						reaction: null
+					};
+				} else {
+					const [_, newReaction, updatedMessage] = await Promise.all([
+						this.reactionModel.deleteOne({_id: reaction._id}).exec(),
+						this.createReaction(messageId, userId, type),
+						this.messageModel.findByIdAndUpdate(messageId, {$inc: {[`reactions.${reaction.type}`]: -1, [`reactions.${type}`]: 1}}, {new: true}).exec()
+					])
+					await this.cacheManager.set(`message:${messageId}`, updatedMessage);
+					this.logger.log("addReactionToMessage:::Changed duplicated reaction on a message");
+					return {
+						message: updatedMessage,
+						reaction: newReaction
+					};
+				}
+			}
+
+			const newReaction = await this.createReaction(messageId, userId, type);
+			this.logger.log(`addReactionToMessage:::Added a ${type} by user:${userId} to message:${messageId}`);
+			const [updatedMessage, updatedUser] = await Promise.all([
+				this.messageModel.findByIdAndUpdate(messageId, {$inc: {[`reactions.${type}`]: 1}}, {new: true}).exec(), 
+				this.userModel.findByIdAndUpdate(messageData.message.user, {$inc: {likes: 1}}).exec()
+			]);
+			await Promise.all([
+				this.cacheManager.set(`message:${messageId}`, updatedMessage, this.CACHE_TIME),
+				this.cacheManager.set(`user:${updatedUser._id}`, updatedUser)
+			]);
+			return {
+				message: updatedMessage,
+				reaction: newReaction
+			};
+		} catch(err) {
+			this.logger.error("addReactionToMessage:::", err);
 			return null;
 		}
 	}
@@ -998,7 +1087,7 @@ export class MongodbService {
 		try {
 			const userData = await this.findUserById(userId);
 			if(!userData || !userData.user) {
-				this.logger.log("User not found");
+				this.logger.log("createAlert:::User not found");
 				return null;
 			}
 			const time = new Date();
@@ -1008,10 +1097,10 @@ export class MongodbService {
 				read: false,
 				create_time: time
 			});
-			this.logger.log(`Created new alert, id=${alert._id}`);
+			this.logger.log(`createAlert:::Created new alert, id=${alert._id}`);
 			return alert;
 		} catch(err) {
-			this.logger.error(err);
+			this.logger.error("createAlert:::", err);
 			return null;
 		}
 	}
@@ -1020,7 +1109,7 @@ export class MongodbService {
 		try {
 			const cache: AlertDocument = await this.cacheManager.get(`alert:${alertId}`);
 			if(cache) {
-				this.logger.log(`CACHE:::Found alert:${alertId}`);
+				this.logger.log(`findAlertById:::CACHE:::Found alert:${alertId}`);
 				return {
 					cache: true,
 					alert: cache
@@ -1031,13 +1120,35 @@ export class MongodbService {
 			if(alert) {
 				await this.cacheManager.set(`alert:${alertId}`, alert, this.CACHE_TIME);
 			}
-			this.logger.log(`DB:::Found alert:${alert}`);
+			this.logger.log(`findAlertById:::DB:::Found alert:${alert}`);
 			return {
 				cache: false,
 				alert: alert
 			};
 		} catch(err) {
-			this.logger.error(err);
+			this.logger.error("findAlertById:::", err);
+			return null;
+		}
+	}
+
+	async findAlerts(userId: string, current: string, limit: number): Promise<AlertDocument[]> {
+		try {
+			const userData = await this.findUserById(userId);
+			if(!userData || !userData.user) {
+				this.logger.log("User not found");
+				return null;
+			}
+
+			let alerts: AlertDocument[];
+			if(current) {
+				alerts = await this.alertModel.find({user: userId}, {_id: {$lt: current}}).limit(limit).exec();
+			} else {
+				alerts = await this.alertModel.find({user: userId}).sort({create_time: -1}).limit(limit).exec();
+			}
+			this.logger.log(`findAlerts:::Found alerts, ${alerts}`);
+			return alerts;
+		} catch(err) {
+			this.logger.error(`findAlerts:::${err}`);
 			return null;
 		}
 	}
@@ -1076,7 +1187,7 @@ export class MongodbService {
 				this.findUserById(userId)
 			]);
 			if(!userData || !userData.user || !threadData || !threadData.thread) {
-				this.logger.log("User or thread not found");
+				this.logger.log("createBookmark:::User or thread not found");
 				return null;
 			}
 			const time = new Date();
@@ -1085,10 +1196,10 @@ export class MongodbService {
 				user: userId,
 				create_time: time
 			});
-			this.logger.log(`Created new bookmark, id=${bookmark._id}`);
+			this.logger.log(`createBookmark:::Created new bookmark, id=${bookmark._id}`);
 			return bookmark;
 		} catch(err) {
-			this.logger.error(err);
+			this.logger.error("createBookmark:::", err);
 			return null;
 		}
 	}
@@ -1097,7 +1208,7 @@ export class MongodbService {
 		try {
 			const cache: BookmarkDocument = await this.cacheManager.get(`bookmark:${bookmarkId}`);
 			if(cache) {
-				this.logger.log(`CACHE:::Found bookmark:${bookmarkId}`);
+				this.logger.log(`findBookmarkById:::CACHE:::Found bookmark:${bookmarkId}`);
 				return {
 					cache: true,
 					bookmark: cache
@@ -1108,13 +1219,13 @@ export class MongodbService {
 			if(bookmark) {
 				await this.cacheManager.set(`bookmark:${bookmarkId}`, bookmark, this.CACHE_TIME);
 			}
-			this.logger.log(`DB:::Found bookmark:${bookmark}`);
+			this.logger.log(`findBookmarkById:::DB:::Found bookmark:${bookmark}`);
 			return {
 				cache: false,
 				bookmark: bookmark,
 			};
 		} catch(err) {
-			this.logger.error(err);
+			this.logger.error("findBookmarkById:::", err);
 			return null;
 		}
 	}
@@ -1152,7 +1263,7 @@ export class MongodbService {
 				this.findUserById(userId)
 			]);
 			if(!userData || !userData.user || !threadData || !threadData.thread) {
-				this.logger.log("User or thread not found");
+				this.logger.log("createRating:::User or thread not found");
 				return null;
 			}
 			const time = new Date();
@@ -1162,10 +1273,10 @@ export class MongodbService {
 				create_time: time,
 				score: score
 			});
-			this.logger.log(`Created new rating, id=${rating._id}`);
+			this.logger.log(`createRating:::Created new rating, id=${rating._id}`);
 			return rating;
 		} catch(err) {
-			this.logger.error(err);
+			this.logger.error("createRating:::", err);
 			return null;
 		}
 	}
@@ -1174,7 +1285,7 @@ export class MongodbService {
 		try {
 			const cache: RatingDocument = await this.cacheManager.get(`rating:${ratingId}`);
 			if(cache) {
-				this.logger.log(`CACHE:::Found rating:${ratingId}`);
+				this.logger.log(`findRatingById:::CACHE:::Found rating:${ratingId}`);
 				return {
 					cache: true,
 					rating: cache
@@ -1185,13 +1296,108 @@ export class MongodbService {
 			if(rating) {
 				await this.cacheManager.set(`rating:${ratingId}`, rating, this.CACHE_TIME);
 			}
-			this.logger.log(`DB:::Found rating:${rating}`);
+			this.logger.log(`findRatingById:::DB:::Found rating:${rating}`);
 			return {
 				cache: false,
 				rating: rating,
 			};
 		} catch(err) {
-			this.logger.error(err);
+			this.logger.error("findRatingById:::", err);
+			return null;
+		}
+	}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+	/* ProfilePosting model
+	------------------------------------------------------------------
+	------------------------------------------------------------------
+	------------------------------------------------------------------
+	------------------------------------------------------------------
+	------------------------------------------------------------------
+	------------------------------------------------------------------
+	------------------------------------------------------------------
+	*/
+
+	async createProfilePosting(userId: string, userWallId: string, message: string): Promise<ProfilePostingDocument> {
+		try {
+			const [userData1, userData2] = await Promise.all([
+				this.findUserById(userId),
+				this.findUserById(userWallId)
+			]);
+			if(!userData1 || !userData1.user || !userData2 || !userData2.user) {
+				this.logger.log("createProfilePosting:::User not found");
+				return null;
+			}
+
+			const time = new Date();
+			const profilePosting = await this.profilepostingModel.create({
+				user: userId,
+				userWall: userWallId,
+				message,
+				create_time: time,
+			});
+			this.logger.log(`createProfilePosting:::Created new rating, id=${profilePosting._id}`);
+			return profilePosting;
+		} catch(err) {
+			this.logger.error("createProfilePosting:::", err);
+			return null;
+		}
+	}
+
+	async findProfilePostingById(profilePostingId: string): Promise<{cache: boolean, profileposting: ProfilePostingDocument}> {
+		try {
+			const cache: ProfilePostingDocument = await this.cacheManager.get(`profileposting:${profilePostingId}`);
+			if(cache) {
+				this.logger.log(`findProfilePostingById:::CACHE:::Found rating:${profilePostingId}`);
+				return {
+					cache: true,
+					profileposting: cache
+				};
+			}
+
+			const profileposting = await this.profilepostingModel.findById(profilePostingId).exec();
+			if(profileposting) {
+				await this.cacheManager.set(`profileposting:${profilePostingId}`, profileposting, this.CACHE_TIME);
+			}
+			this.logger.log(`findProfilePostingById:::DB:::Found profileposting:${profileposting}`);
+			return {
+				cache: false,
+				profileposting: profileposting,
+			};
+		} catch(err) {
+			this.logger.error("findProfilePostingById:::", err);
+			return null;
+		}
+	}
+
+	async findProfilePosting(userWallId: string, current: string, limit: number): Promise<ProfilePostingDocument[]> {
+		try {
+			let postings: ProfilePostingDocument[];
+			if(current) {
+				postings = await this.profilepostingModel.find({user_wall: userWallId, _id: {$lt: current}}).limit(limit).exec();
+			} else {
+				postings = await this.profilepostingModel.find({user_wall: userWallId}).sort({create_time: -1}).limit(limit).exec();
+			}
+			this.logger.log(`findProfilePosting:::Found profile postings of userWall: ${userWallId}`);
+			return postings;
+		} catch(err) {
+			this.logger.error("findProfilePosting:::", err);
 			return null;
 		}
 	}
