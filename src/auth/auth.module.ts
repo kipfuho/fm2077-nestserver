@@ -1,5 +1,4 @@
 import { Module } from '@nestjs/common';
-import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { DatabaseModule } from 'src/database/db.module';
 import { JwtModule } from '@nestjs/jwt';
@@ -13,10 +12,11 @@ import { SessionSerializer } from './session.serializer';
 import { CacheModule } from '@nestjs/cache-manager';
 import { RedisClientOptions } from 'redis';
 import { redisStore } from 'cache-manager-redis-yet';
+import { MongodbModule } from 'src/mongodb/mongodb.module';
 
 @Module({
   imports: [
-    DatabaseModule,
+    MongodbModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({
@@ -30,18 +30,20 @@ import { redisStore } from 'cache-manager-redis-yet';
       session: true,
     }),
     CacheModule.registerAsync<RedisClientOptions>({
-			useFactory: async () => ({
+      imports: [ConfigModule],
+			useFactory: async (configService: ConfigService) => ({
 				store: await redisStore({
 					socket: {
-						host: 'localhost',
-						port: 6379
+						host: configService.get("REDIS_HOST"),
+						port: configService.get("REDIS_PORT")
 					},
-					ttl: 365*86400*1000 // miliseconds
+          password: configService.get("REDIS_PASSWORD"),
+					ttl: 60*1000 // 1 minute
 				})
-			})
+			}),
+      inject: [ConfigService],
     }),
   ],
-  controllers: [AuthController],
   providers: [
     AuthService, 
     LocalStrategy,

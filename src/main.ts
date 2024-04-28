@@ -19,6 +19,8 @@ async function bootstrap() {
     httpsOptions
   });
   const configService = app.get(ConfigService);
+
+  /* local mysql session store
   const mysqlSessionStore = new (MySQLStore(session))({
     host: 'localhost',
     port: 3306,
@@ -29,8 +31,15 @@ async function bootstrap() {
     checkExpirationInterval: 86400000, // 1 day
     expiration: 365*86400000, // 365 days
   });
+  */
 
-  const redisClient = createClient();
+  const redisClient = createClient({
+    socket: {
+      host: configService.get("REDIS_CLOUD_HOST"),
+      port: configService.get("REDIS_CLOUD_PORT")
+    },
+    password: configService.get("REDIS_CLOUD_PASSWORD"),
+  });
   redisClient.connect().catch((console.error));
   const redisStore = new RedisStore({
     client: redisClient,
@@ -51,6 +60,7 @@ async function bootstrap() {
     cookie: {
       sameSite: "none",
       secure: true,
+      httpOnly: true
     }
   }));
   app.use(passport.initialize())

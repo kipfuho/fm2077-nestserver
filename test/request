@@ -1,0 +1,44 @@
+	https://localhost:3001/mongodb/category/create?name=annoucement&title=Annoucement
+
+	https://localhost:3001/mongodb/category/create?name=game&title=Games
+
+	https://localhost:3001/mongodb/category/create?name=annoucement&title=Annoucement
+
+	https://localhost:3001/mongodb/category/create?name=manga-anime&title=Manga %26 Anime
+
+	https://localhost:3001/mongodb/category/create?name=market&title=Market
+
+	https://localhost:3001/mongodb/category/create?name=development&title=Development
+
+	https://localhost:3001/mongodb/category/create?name=discussion&title=General Discussion
+
+	https://localhost:3001/mongodb/category/create?name=feedback&title=Site Feedbacks
+
+
+
+
+	https://localhost:3001/mongodb/forum/create?name=Sites Rules, News %26 Annoucements&about=About Sites Rules, News %26 Annoucements
+
+	https://localhost:3001/mongodb/forum/create?name=Hot games&about=About Hot games
+
+	https://localhost:3001/mongodb/forum/create?name=New games&about=About New games
+
+	https://localhost:3001/mongodb/forum/create?name=Hot Anime Manga&about=About Hot Anime Manga
+
+	https://localhost:3001/mongodb/forum/create?name=New Animes&about=New Mangas
+
+	https://localhost:3001/mongodb/forum/create?name=Buying&about=About Buying
+
+	https://localhost:3001/mongodb/forum/create?name=Selling&about=About Selling
+
+	https://localhost:3001/mongodb/forum/create?name=Trading&about=About Trading
+
+	https://localhost:3001/mongodb/forum/create?name=Next.js&about=About Next
+
+	https://localhost:3001/mongodb/forum/create?name=Nestjs&about=About Nest
+
+	https://localhost:3001/mongodb/forum/create?name=General Discussion&about=About General Discussion
+
+	https://localhost:3001/mongodb/forum/create?name=Features Request&about=About Features Request
+
+	https://localhost:3001/mongodb/forum/create?name=Site problems&about=About Site problems

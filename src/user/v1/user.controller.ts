@@ -6,6 +6,7 @@ import {
 	HttpCode, 
 	HttpException, 
 	HttpStatus,
+	Inject,
 	InternalServerErrorException, 
 	Logger, 
 	Param, 
@@ -16,34 +17,112 @@ import {
 	StreamableFile,
 	UploadedFile,
 	UploadedFiles,
+	UseGuards,
 	UseInterceptors
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { FileFieldsInterceptor, FileInterceptor } from '@nestjs/platform-express';
+import { RedisCache } from 'cache-manager-redis-yet';
 import { createReadStream, statSync } from 'fs';
 import { diskStorage } from 'multer';
 import { join } from 'path';
 import { AuthService } from 'src/auth/auth.service';
+import { LocalAuthGuard } from 'src/auth/local-auth.guard';
 import { Public } from 'src/auth/public';
 import { DatabaseService } from 'src/database/db.service';
-import { CreateMessageDto, CreateThreadDto } from 'src/interface/create.dto';
-import { GetForumCategoryDto, GetMessageThreadDto, GetThreadForumDto } from 'src/interface/get.dto';
+import { CreateMessageDto, CreateThreadDto, CreateUserDto } from 'src/interface/create.dto';
+import { GetThreadForumDto } from 'src/interface/get.dto';
 import { getFileType } from 'src/utils/helper';
 
-@Controller()
-export class UserController {
+@Controller("v1")
+export class UserControllerV1 {
 	constructor(
 		private readonly dbService: DatabaseService,
 		private readonly authService: AuthService,
 		private readonly jwtService: JwtService,
+		@Inject(CACHE_MANAGER) private readonly cacheManager: RedisCache,
 	) {}
 
-	private logger = new Logger(UserController.name);
+	private logger = new Logger(UserControllerV1.name);
+
+	@HttpCode(HttpStatus.OK)
+	@Public()
+  @Get("metadata")
+  async getMetadata() {
+		const metadata = await this.dbService.getMetadata();
+		if(!metadata) {
+			throw new HttpException("Error", HttpStatus.BAD_REQUEST);
+		}
+    return metadata;
+  }
+
+	/* Authentication API
+	-----------------------------------------------------------
+	-----------------------------------------------------------
+	-----------------------------------------------------------
+	-----------------------------------------------------------
+	-----------------------------------------------------------
+	*/
+
+	@HttpCode(HttpStatus.CREATED)
+	@Public()
+  @Post("/register")
+  async addUser(@Body() createUserDto : CreateUserDto) {
+    const { username, password, email } = createUserDto;
+		const result = await this.dbService.createNewLogin(username, password, email);
+		if(!result) {
+			this.logger.log("API /register failed" + createUserDto);
+			throw new HttpException("Username or Email existed", HttpStatus.BAD_REQUEST);
+		}
+		this.logger.log("API /register succeeded" + createUserDto);
+		return {message: "Created"};
+  }
+
+	// log in api
+	// save session and send a cookie
+	@HttpCode(HttpStatus.OK)
+	@Public()
+  @UseGuards(LocalAuthGuard)
+  @Post('/login')
+  async login(@Req() req: any, @Res({passthrough: true}) res: any) {
+		// save session to redis
+		await this.cacheManager.set(`login:${req.user.id}:token`, req.user.refreshToken);
+		// attach access_token and refresh_token as cookie
+		res.cookie('jwt', req.session.passport.user.jwt);
+		res.cookie('refresh_token', req.session.passport.user.refreshToken);
+		this.logger.log("API /login " + JSON.stringify(req.user));
+    return await req.user;
+  }
+
+	// log out user
+	@HttpCode(HttpStatus.OK)
+	@Get('/logout')
+	async logout(@Req() req: any) {
+		// destroy cache and session
+		await Promise.all([
+			this.cacheManager.del(`login:${req.user.id}`),
+			this.cacheManager.del(`login:${req.user.id}:token`),
+			this.cacheManager.del(`user:${req.user.id}`),
+		]);
+		req.session.destroy();
+		this.logger.log("API /logout " + req.user);
+		return { message: 'The user session has ended' };
+	}
+
+
+
+
+
+
+
 	
-	/* --------------------------------------------------------------------------
-		API for user repository
-
-
+	
+	/* User repository API
+	-----------------------------------------------------------
+	-----------------------------------------------------------
+	-----------------------------------------------------------
+	-----------------------------------------------------------
+	-----------------------------------------------------------
 	*/ 
 
 
@@ -152,12 +231,14 @@ export class UserController {
 		if(result) {
 			// generate new token
 			const tokenPayload = {id, email, username: body.username};
+			const newJwt = this.jwtService.sign(tokenPayload);
 			const newRefreshToken = this.authService.encryptRefreshToken(tokenPayload);
-			res.cookie("jwt", this.jwtService.sign(tokenPayload));
+			res.cookie("jwt", newJwt);
 			res.cookie("refresh_token", newRefreshToken);
 			// update and save session, cache
 			req.session.passport.user.username = body.username;
-			req.session.passport.refreshToken = newRefreshToken;
+			req.session.passport.user.jwt = newJwt;
+			req.session.passports.user.refreshToken = newRefreshToken;
 			req.session.save();
 
 			this.logger.log(`API POST /user/update-username succeeded, user:${id}`);
@@ -188,12 +269,14 @@ export class UserController {
 		if(result) {
 			// generate new token
 			const tokenPayload = {id, email: body.email, username};
+			const newJwt = this.jwtService.sign(tokenPayload);
 			const newRefreshToken = this.authService.encryptRefreshToken(tokenPayload);
-			res.cookie("jwt", this.jwtService.sign(tokenPayload));
+			res.cookie("jwt", newJwt);
 			res.cookie("refresh_token", newRefreshToken);
 			// update and save session, cache
 			req.session.passport.user.username = body.username;
-			req.session.passport.refreshToken = newRefreshToken;
+			req.session.passport.user.jwt = newJwt;
+			req.session.passport.user.refreshToken = newRefreshToken;
 			req.session.save();
 
 			this.logger.log(`API POST /user/update-email succeeded, user:${id}`);
@@ -206,10 +289,12 @@ export class UserController {
 
 
 	
-	/* --------------------------------------------------------------------------
-		API for forum repository
-
-
+	/* Forum repository and Category repository API
+	-----------------------------------------------------------
+	-----------------------------------------------------------
+	-----------------------------------------------------------
+	-----------------------------------------------------------
+	-----------------------------------------------------------
 	*/ 
 
 
@@ -234,12 +319,12 @@ export class UserController {
 	@HttpCode(HttpStatus.OK)
 	@Public()
 	@Get("/forum/get-forum")
-	async getAllForum(@Query("category") category: string) {
+	async getAllForum(@Query("categoryId") categoryId: number) {
 		// if a category is given, return all forums in that category instead
-		if(category) {
-			const forums = await this.dbService.findForumCategory(category);
+		if(categoryId) {
+			const forums = await this.dbService.findForumCategory(categoryId);
 			if(forums !== null) {
-				this.logger.log(`API GET /forum/get-forum succeeded, category:${category}`);
+				this.logger.log(`API GET /forum/get-forum succeeded, category:${categoryId}`);
 				return forums;
 			} else {
 				this.logger.log("API GET /forum/get-forum failed, forum not found");
@@ -261,7 +346,7 @@ export class UserController {
 	@HttpCode(HttpStatus.OK)
 	@Public()
 	@Post("/forum/get-forum-category")
-	async postForumCategory(@Body() body : GetForumCategoryDto) {
+	async postForumCategory(@Body() body : any) {
 		const {category} = body;
 		const forums = await this.dbService.findForumCategory(category);
 		if(forums !== null) {
@@ -272,13 +357,31 @@ export class UserController {
 			throw new HttpException("forums not found", HttpStatus.BAD_REQUEST);
 		}
 	}
+	
+	@HttpCode(HttpStatus.OK)
+	@Public()
+	@Get("/category/:categoryId")
+	async getCategory(@Param("categoryId") categoryId: number) {
+		const category = await this.dbService.findOneCategory(categoryId);
+		if(category) {
+			this.logger.log(`API /category/:categoryId, id=${categoryId}`);
+			return category;
+		}
+		throw new HttpException("got null", HttpStatus.BAD_REQUEST);
+	}
 
 
 
-	/* --------------------------------------------------------------------------
-		API for thread repository
 
 
+
+
+	/* Thread repository API
+	-----------------------------------------------------------
+	-----------------------------------------------------------
+	-----------------------------------------------------------
+	-----------------------------------------------------------
+	-----------------------------------------------------------
 	*/ 
 
 
@@ -288,7 +391,7 @@ export class UserController {
 	async createNewThread(@Req() req: any, @Body() body: CreateThreadDto) {
 		const {forum_id, user_id, content, thread_title, tag} = body;
 		if(user_id !== req.user.id) {
-			this.logger.log("API /thread/create-thread failed, user_id not match");
+			this.logger.log(`API /thread/create-thread failed, user_id not match, ${user_id} and ${req.user.id}`);
 			throw new HttpException("Error creating new thread", HttpStatus.INTERNAL_SERVER_ERROR);
 		}
 
@@ -339,16 +442,31 @@ export class UserController {
 	//		this count as user view a page
 	@HttpCode(HttpStatus.OK)
 	@Public()
-	@Post("/thread/get-thread")
-	async getThreadFull(@Body() body: GetMessageThreadDto) {
-		const {thread_id} = body;
-		const thread = await this.dbService.findThreadFull(thread_id);
+	@Get("/thread/get-thread")
+	async getThreadFull(@Query("thread_id") thread_id: number) {
+		const threadData = await this.dbService.findOneThread(thread_id);
 
-		if(thread !== null) {
-			this.logger.log(`API /thread/get-thread succeeded, thread:${thread_id}`);
-			return thread;
+		if(threadData !== null) {
+			this.logger.log(`API GET /thread/get-thread succeeded, thread:${thread_id}`);
+			return threadData.thread;
 		} else {
 			this.logger.log(`API /thread/get-thread failed, thread not found`);
+			throw new HttpException("thread not found", HttpStatus.NOT_FOUND);
+		}
+	}
+
+	//4.	this will return threads based off forum_id, offset and limit
+	@HttpCode(HttpStatus.OK)
+	@Public()
+	@Get("/thread/get-thread-forum")
+	async getThreads(@Query("forum_id") id: number, @Query("offset") offset: number, @Query("limit") limit: number) {
+		const threads = await this.dbService.findThread(id, limit, offset);
+
+		if(threads !== null) {
+			this.logger.log(`API GET /thread/get-thread succeeded, forum:${id}`);
+			return threads;
+		} else {
+			this.logger.log(`API GET /thread/get-thread failed, threads not found`);
 			throw new HttpException("thread not found", HttpStatus.NOT_FOUND);
 		}
 	}
@@ -390,11 +508,13 @@ export class UserController {
 				this.logger.log(`API /thread/get-thread-lastest failed, thread not found`);
 				throw new HttpException("thread not found", HttpStatus.NOT_FOUND);
 			}
-			const lastestMessage = await this.dbService.findLastestMessageThread(lastestThread.id);
-			const user = await this.dbService.findUser(null, null, lastestMessage.user_id);
+			const lastestMessageData = this.dbService.findLastestMessageThread(lastestThread.id);
+			const userData = this.dbService.findUser(null, null, lastestThread.user_id);
+			const [lastestMessage, user] = await Promise.all([lastestMessageData, userData]);
+			
 
 			this.logger.log(`API /thread/get-thread-lastest succeeded, forum:${forum_id}`);
-			return {thread: lastestThread, message: lastestMessage, user: user};
+			return {thread: lastestThread, message: lastestMessage, user: user.user};
 		}
 		this.logger.log(`API /thread/get-thread-lastest failed, forum_id?`);
 		throw new HttpException("check if forum_id is right", HttpStatus.BAD_REQUEST);
@@ -420,10 +540,12 @@ export class UserController {
 
 
 
-	/* --------------------------------------------------------------------------
-		API for message repository
-
-
+	/* Message repository API
+	-----------------------------------------------------------
+	-----------------------------------------------------------
+	-----------------------------------------------------------
+	-----------------------------------------------------------
+	-----------------------------------------------------------
 	*/ 
 
 
@@ -486,7 +608,7 @@ export class UserController {
 		}
 	}
 
-	//4. 	return lastest message of a thread, and who made it
+	//4. 	return lastest message of a thread
 	@HttpCode(HttpStatus.OK)
 	@Public()
 	@Get("/message/get-message-lastest")
@@ -518,7 +640,31 @@ export class UserController {
 		return true;
 	}
 	
+	//6. Add a reaction to a message
+	@HttpCode(HttpStatus.OK)
+	@Get("message/add-reaction")
+	async addMessageReaction(@Req() req: any, @Query("message_id") message_id: number, @Query("type") type: string) {
+		if(type === 'like') {
+			const result = await this.dbService.updateMessageReaction(0, message_id, req.user.id, true);
+			this.logger.log(`API GET /message/add-reaction, ${result}`);
+			if(result) {
+				return true;
+			}
+		}
+		throw new HttpException("fail to add", HttpStatus.BAD_REQUEST);
+	}
 
+	//6. Remove a reaction from a message
+	@HttpCode(HttpStatus.OK)
+	@Get("message/remove-reaction")
+	async removeMessageReaction(@Req() req: any, @Query("message_id") message_id: number) {
+		const result = await this.dbService.updateMessageReaction(0, message_id, req.user.id, false);
+		this.logger.log(`API GET /message/add-reaction, ${result}`);
+		if(result) {
+			return true;
+		}
+		throw new HttpException("fail to remove", HttpStatus.BAD_REQUEST);
+	}
 	
 
 	
@@ -527,10 +673,12 @@ export class UserController {
 
 	
 
-	/* --------------------------------------------------------------------------
-		API for images
-
-
+	/* API for images transferring
+	-----------------------------------------------------------
+	-----------------------------------------------------------
+	-----------------------------------------------------------
+	-----------------------------------------------------------
+	-----------------------------------------------------------
 	*/ 
 
 	// send image from forum storage based on its name
@@ -617,8 +765,4 @@ export class UserController {
 			link: links
 		};
   }
-
-	
-
-	
 }

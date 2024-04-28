@@ -20,6 +20,6 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 
   async validate(payload: any) {
     // can change this according to what we put in payload in login
-    return { username: payload.username, email: payload.email };
+    return { id: payload.id, username: payload.username };
   }
 }

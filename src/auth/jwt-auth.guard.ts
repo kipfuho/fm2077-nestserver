@@ -56,12 +56,12 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
       request.session.destroy();
       throw new HttpException("Session error", HttpStatus.BAD_REQUEST);
     }
-    if(sessionCache !== request.user.refreshToken) {
+    if(sessionCache !== request.session.passport.user.refreshToken) {
       // this mean someone else has logged into the same account
       request.session.destroy();
       throw new HttpException("Someone has logged into your account", HttpStatus.FORBIDDEN);
     }
-    
+
     // activate jwt through strategy
     // catch error is probably due to expired token
     // renew access token in this case
@@ -76,21 +76,23 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
       // check refresh token from request and session store
       // if equal, provide new jwt token
       // else destroy sesion
-      if(request.user.refreshToken !== request.cookies.refresh_token) {
-        this.logger.debug("Refresh token error!");
-        request.session.destroy();
-        throw new HttpException("Refresh token error, destroying session", HttpStatus.UNAUTHORIZED);
+      if(request.session.passport.user.refreshToken !== request.cookies.refresh_token) {
+        this.logger.debug(`Refresh token error!`);
+        console.log(`sess: ${request.session.passport.user.refreshToken}`);
+        console.log(`cookie: ${request.cookies.refresh_token}`)
+        throw new HttpException("Old tokens received, possible duplicated requests", HttpStatus.UNAUTHORIZED);
+      } else {
+        // create new token and attach to response
+        const newRefreshToken = this.authService.encryptRefreshToken({id: request.user.id, username: request.user.username});
+        response.cookie('refresh_token', newRefreshToken);
+        response.cookie('jwt', this.jwtService.sign(request.user));
+        // save session
+        request.session.passport.user.refreshToken = newRefreshToken;
+        request.session.save();
+        // save cache
+        await this.cacheManager.set(`login:${request.user.id}:token`, newRefreshToken, 86400*1000);
+        return true;
       }
-      // create new token and attach to response
-      const newRefreshToken = this.authService.encryptRefreshToken({username: request.user.username, email: request.user.email});
-      response.cookie('refresh_token', newRefreshToken);
-      response.cookie('jwt', this.jwtService.sign(request.user));
-      // save session
-      request.session.passport.user.refreshToken = newRefreshToken;
-      request.session.save();
-      // save cache
-      await this.cacheManager.set(`login:${request.user.id}:token`, newRefreshToken);
-      return true;
     }
   }
 
@@ -100,6 +102,7 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
       throw err || new UnauthorizedException();
     }
     this.logger.debug("Handle request, User:", user);
+    this.logger.error("Handle request, Error:", err);
     return user;
   }
 }
