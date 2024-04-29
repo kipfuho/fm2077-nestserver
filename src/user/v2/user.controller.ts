@@ -680,13 +680,14 @@ export class UserControllerV2 {
 	@Get("message/get")
 	async getMessage(@Query("threadId") threadId: string, @Query("offset") offset: number, @Query("limit") limit: number, @Query("messageId") messageId: string) {
 		if(messageId) {
-			const message = await this.mongodbService.findMessageById(messageId);
-			if(!message) {
+			const messageData = await this.mongodbService.findMessageById(messageId);
+			if(!messageData || !messageData.message) {
 				throw new HttpException("Message not found", HttpStatus.NOT_FOUND);
 			}
-			return message;
+			return messageData.message;
 		}
-		const messages = await this.mongodbService.findMessage(threadId, offset, limit);
+
+		const messages = await this.mongodbService.findMessages(threadId, offset, limit);
 		if(!messages) {
 			throw new HttpException("Messages not found", HttpStatus.NOT_FOUND);
 		}
@@ -854,5 +855,45 @@ export class UserControllerV2 {
 			throw new HttpException("Alerts not found", HttpStatus.BAD_REQUEST);
 		}
 		return alerts;
+	}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+	/* Bookmark model API
+	-----------------------------------------------------------
+	-----------------------------------------------------------
+	-----------------------------------------------------------
+	-----------------------------------------------------------
+	-----------------------------------------------------------
+	*/
+
+	@HttpCode(HttpStatus.OK)
+	@Public()
+	@Get("bookmark/get")
+	async getBookmark(@Query('bookmarkId') bookmarkId: string, @Query('userId') userId: string, @Query('messageId') messageId: string) {
+		if(bookmarkId) {
+			const bookmark = await this.mongodbService.findBookmarkById(bookmarkId);
+			if(!bookmark) {
+				throw new HttpException("Bookmark not found", HttpStatus.BAD_REQUEST);
+			}
+			return bookmark;
+		}
+
+		const bookmark = await this.mongodbService.findBookmark(userId, messageId);
+		if(!bookmark) {
+			throw new HttpException("Alerts not found", HttpStatus.BAD_REQUEST);
+		}
+		return bookmark;
 	}
 }

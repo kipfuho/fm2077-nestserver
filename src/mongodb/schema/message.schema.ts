@@ -45,9 +45,11 @@ export class Message {
 		sad: number,
 		angry: number
 	};
-
-	@Prop()
-	delete: boolean;
+	
+	// Which page this message belong to in a thread
+	// also take messages per page to account
+	@Prop({type: Map, of: Number})
+	threadPage: Map<number, number>;
 }
 
 export type MessageDocument = HydratedDocument<Message>;

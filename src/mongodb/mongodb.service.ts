@@ -17,6 +17,7 @@ import { Bookmark, BookmarkDocument } from './schema/bookmark.schema';
 import { Rating, RatingDocument } from './schema/rating.schema';
 import { ProfilePosting, ProfilePostingDocument } from './schema/profileposting.schema';
 import { Report } from './schema/report.schema';
+import { DeletedItem, DeletedItemDocument } from './schema/deleted.schema';
 
 @Injectable()
 export class MongodbService {
@@ -33,6 +34,7 @@ export class MongodbService {
 		@InjectModel(Rating.name) private readonly ratingModel: Model<Rating>,
 		@InjectModel(ProfilePosting.name) private readonly profilepostingModel: Model<ProfilePosting>,
 		@InjectModel(Report.name) private readonly reportModel: Model<Report>,
+		@InjectModel(DeletedItem.name) private readonly deletedItemModel: Model<DeletedItem>,
 		@Inject(CACHE_MANAGER) private readonly cacheManager: RedisCache,
 		private readonly mailService: MailService
 	) {}
@@ -175,13 +177,14 @@ export class MongodbService {
 				return null;
 			}
 
-			const updatedUser = await this.userModel.findByIdAndUpdate(userId, {$set: {username: username}}, {new: true}).exec();
+			const user = await this.userModel.findByIdAndUpdate(userId, {$set: {username: username}}, {new: true}).exec();
 			if(userData.cache) {
-				this.cacheManager.set(`user:${userId}`, updatedUser, this.CACHE_TIME);
+				this.cacheManager.set(`user:${userId}`, user, this.CACHE_TIME);
 			}
 			this.logger.log(`editUsernameUser:::Updated username of user:${userId}`);
+			return user;
 		} catch(err) {
-			this.logger.error("editUsernameUser:::", err);
+			this.logger.error(`editUsernameUser:::${err}`);
 			return null;
 		}
 	}
@@ -198,11 +201,12 @@ export class MongodbService {
 				return null;
 			}
 
-			const updatedUser = await this.userModel.findByIdAndUpdate(userId, {$set: {email: email}}, {new: true}).exec();
+			const user = await this.userModel.findByIdAndUpdate(userId, {$set: {email: email}}, {new: true}).exec();
 			if(userData.cache) {
-				this.cacheManager.set(`user:${userId}`, updatedUser, this.CACHE_TIME);
+				this.cacheManager.set(`user:${userId}`, user, this.CACHE_TIME);
 			}
 			this.logger.log(`editEmailUser:::Updated email of user:${userId}`);
+			return user;
 		} catch(err) {
 			this.logger.error("editEmailUser:::", err);
 			return null;
@@ -237,8 +241,9 @@ export class MongodbService {
 				this.cacheManager.set(`user:${userId}`, updatedUser, this.CACHE_TIME);
 			}
 			this.logger.log(`editUserSetting:::Updated information of user:${userId}`);
+			return updatedUser;
 		} catch(err) {
-			this.logger.error("editUserSetting:::", err);
+			this.logger.error(`editUserSetting:::${err}`);
 			return null;
 		}
 	}
@@ -256,13 +261,14 @@ export class MongodbService {
 				return null;
 			}
 
-			const updatedUser = await this.userModel.findByIdAndUpdate(userId, {$set: {password: password}}, {new: true}).exec();
+			const user = await this.userModel.findByIdAndUpdate(userId, {$set: {password: password}}, {new: true}).exec();
 			if(userData.cache) {
-				this.cacheManager.set(`user:${userId}`, updatedUser, this.CACHE_TIME);
+				this.cacheManager.set(`user:${userId}`, user, this.CACHE_TIME);
 			}
 			this.logger.log(`editPasswordUser:::Updated password of user:${userId}`);
+			return user;
 		} catch(err) {
-			this.logger.error("editPasswordUser:::", err);
+			this.logger.error(`editPasswordUser:::${err}`);
 			return null;
 		}
 	}
@@ -285,7 +291,7 @@ export class MongodbService {
 			this.logger.log("createVerifyCode:::Created verify code");
 			return code;
 		} catch(err) {
-			this.logger.error("createVerifyCode:::", err);
+			this.logger.error(`createVerifyCode:::${err}`);
 			return null;
 		}
 	}
@@ -304,13 +310,13 @@ export class MongodbService {
 				return null;
 			}
 
-			const _user = await this.userModel.findByIdAndUpdate(userId, {$set: {class: 1}});
+			const user = await this.userModel.findByIdAndUpdate(userId, {$set: {class: 1}}, {new: true}).exec();
 			await Promise.all([
-				this.cacheManager.set(`user:${userId}`, _user, this.CACHE_TIME),
+				this.cacheManager.set(`user:${userId}`, user, this.CACHE_TIME),
 				this.cacheManager.del(`user:${userId}:verifyCode`)
 			]);
 			
-			return _user;
+			return user;
 		} catch(err) {
 			this.logger.error("verifyEmail:::", err);
 			return null;
@@ -388,15 +394,19 @@ export class MongodbService {
 
 	async addForumToCategory(categoryId: string, forumId: string): Promise<CategoryDocument> {
 		try {
-			const [forumData, categoryData] = await Promise.all([this.findForumById(forumId), this.findCategoryById(categoryId)]);
+			const [forumData, categoryData] = await Promise.all([
+				this.findForumById(forumId), 
+				this.findCategoryById(categoryId)
+			]);
 			if(!forumData.forum || !categoryData.category) {
 				this.logger.log("addForumToCategory:::Category or forum not found");
 				return null;
 			}
+			const category = await this.categoryModel.findByIdAndUpdate(categoryId, {$push: {forums: forumId}}, {new: true}).exec();
 			this.logger.log(`addForumToCategory:::Added forum:${forumId} to category:${categoryId}`);
-			return await this.categoryModel.findByIdAndUpdate(categoryId, {$push: {forums: forumId}}, {new: true}).exec();
+			return category;
 		} catch(err) {
-			this.logger.error("addForumToCategory:::", err);
+			this.logger.error(`addForumToCategory:::${err}`);
 			return null;
 		}
 	}
@@ -438,7 +448,6 @@ export class MongodbService {
 				about,
 				threads: 0,
 				messages: 0,
-				delete: false,
 				privilege: {
 					view: 1,
 					reply: 1,
@@ -505,11 +514,15 @@ export class MongodbService {
 
 	async createThread(forumId: string, userId: string, title: string, tag: Tag[]): Promise<ThreadDocument> {
 		try {
-			const [forumData, userData] = await Promise.all([this.findForumById(forumId), this.findUserById(userId)]);
+			const [forumData, userData] = await Promise.all([
+				this.findForumById(forumId), 
+				this.findUserById(userId)
+			]);
 			if(!userData || !userData.user || !forumData || !forumData.forum) {
 				this.logger.log("createThread:::Forum or user not found");
 				return null;
 			}
+
 			const time = new Date();
 			const thread = await this.threadModel.create({
 				forum: forumId,
@@ -520,13 +533,14 @@ export class MongodbService {
 				update_time: time,
 				replies: 0,
 				views: 0,
-				delete: false,
 				privilege: forumData.forum.privilege
 			});
+
 			const forum = await this.forumModel.findByIdAndUpdate(forumId, {$inc: {threads: 1}}, {new: true}).exec();
 			if(forumData.cache) {
 				this.cacheManager.set(`forum:${forumId}`, forum);
 			}
+
 			this.logger.log(`createThread:::Created a new thread, id=${thread._id.toHexString()}`);
 			// populate alert for followers
 			userData.user.followers.forEach(follower => {
@@ -539,6 +553,7 @@ export class MongodbService {
 		}
 	}
 
+	// Might remove this
 	async addExistTagToThread(threadId: string, tagId: string): Promise<ThreadDocument> {
 		try {
 			const [thread, tag] = await Promise.all([this.findThreadById(threadId), this.findTagById(tagId)]);
@@ -576,6 +591,7 @@ export class MongodbService {
 			if(cache) {
 				if(incre) {
 					cache.views++;
+					this.threadModel.updateOne({_id: threadId}, {$inc: {views: 1}}).exec();
 					await this.cacheManager.set(`thread:${threadId}`, cache, this.CACHE_TIME);
 				}
 				this.logger.log(`findThreadById:::CACHE:::Found thread:${threadId}`);
@@ -707,12 +723,12 @@ export class MongodbService {
 					sad: 0,
 					angry: 0
 				},
-				delete: false
+				threadPage: new Map<number, number>()
 			});
 			await Promise.all([
-				this.forumModel.updateOne({_id: threadData.thread.forum}, {$inc: {messages: 1}}), 
-				this.threadModel.updateOne({_id: threadId}, {$inc: {replies: 1}}),
-				this.userModel.updateOne({_id: userData.user._id}, {$inc: {messages: 1}})
+				this.forumModel.updateOne({_id: threadData.thread.forum}, {$inc: {messages: 1}}).exec(), 
+				this.threadModel.updateOne({_id: threadId}, {$inc: {replies: 1}}).exec(),
+				this.userModel.updateOne({_id: userData.user._id}, {$inc: {messages: 1}}).exec()
 			]);
 			this.logger.log(`createMessage:::Created new message, id=${message._id.toHexString()}`);
 			return message;
@@ -758,13 +774,24 @@ export class MongodbService {
 		return await this.messageModel.find().exec();
 	}
 
-	async findMessage(threadId: string, offset: number, limit: number): Promise<MessageDocument[]> {
+	async findMessages(threadId: string, offset: number, limit: number): Promise<MessageDocument[]> {
 		try {
 			const messages = await this.messageModel.find({thread: threadId}).skip(offset).limit(limit).exec();
+			// update threadPage if needed
+			if(offset % limit === 0) {
+				const page = offset / limit + 1;
+				await Promise.all([messages.map(async (message) => {
+					if(message.threadPage[limit] !== page) {
+						message.threadPage.set(limit, page)
+						await message.save();
+					}
+					return true;
+				})]);
+			}
 			this.logger.log(`findMessage:::DB:::Found messages:${messages}`);
 			return messages;
 		} catch(err) {
-			this.logger.error("findMessage:::", err);
+			this.logger.error(`findMessage:::${err}`);
 			return null;
 		}
 	}
@@ -805,14 +832,21 @@ export class MongodbService {
 				return null;
 			}
 
-			if(messageData.message.attachments.length === 0) {
-				const _message =  await this.messageModel.findByIdAndUpdate(messageId, {$set: {attachments: attachments}}, {new: true});
-				await this.cacheManager.set(`message:${messageId}`, _message, this.CACHE_TIME);
-				return _message;
+			const message = messageData.message;
+			if(message.attachments.length === 0) {
+				message.attachments = attachments;
+				await Promise.all([
+					this.messageModel.updateOne({_id: messageId}, {$set: {attachments: attachments}}).exec(),
+					this.cacheManager.set(`message:${messageId}`, message, this.CACHE_TIME)
+				]);
+				return message;
 			} else {
-				const _message = await this.messageModel.findByIdAndUpdate(messageId, {$push: {attachments: attachments}}, {new: true});
-				await this.cacheManager.set(`message:${messageId}`, _message, this.CACHE_TIME);
-				return _message;
+				message.attachments.push(...attachments);
+				await Promise.all([
+					this.messageModel.updateOne({_id: messageId}, {$push: {attachments: attachments}}).exec(),
+					this.cacheManager.set(`message:${messageId}`, message, this.CACHE_TIME)
+				]);
+				return message;
 			}
 		} catch(err) {
 			this.logger.error("addAttachment:::", err);
@@ -1005,35 +1039,40 @@ export class MongodbService {
 				this.logger.log("addReactionToMessage:::User or message not found");
 				return null;
 			}
+
 			// If user has already reacted the post
 			// We can try to change reaction type, or delete it
+			const message = messageData.message;
 			if(reaction) {
 				// Delete it if of same type
 				if(reaction.type === type) {
-					const [_, updatedMessage, updatedUser] = await Promise.all([
+					message.reactions[type]--;
+					const [_1, _2, updatedUser] = await Promise.all([
 						this.reactionModel.deleteOne({_id: reaction._id}),
-						this.messageModel.findByIdAndUpdate(messageId, {$inc: {[`reactions.${type}`]: -1}}, {new: true}),
-						this.userModel.findByIdAndUpdate(messageData.message.user, {$inc: {likes: -1}}, {new: true})
+						this.messageModel.updateOne({_id: messageId}, {$inc: {[`reactions.${type}`]: -1}}).exec(),
+						this.userModel.findByIdAndUpdate(message.user, {$inc: {likes: -1}}, {new: true}).exec()
 					])
 					await Promise.all([
-						this.cacheManager.set(`message:${messageId}`, updatedMessage),
+						this.cacheManager.set(`message:${messageId}`, message),
 						this.cacheManager.set(`user:${updatedUser._id}`, updatedUser, this.CACHE_TIME)
 					]);
 					this.logger.log("addReactionToMessage:::Deleted duplicated reaction on a message");
 					return {
-						message: updatedMessage,
+						message: message,
 						reaction: null
 					};
 				} else {
-					const [_, newReaction, updatedMessage] = await Promise.all([
-						this.reactionModel.deleteOne({_id: reaction._id}).exec(),
+					message.reactions[reaction.type]--;
+					message.reactions[type]++;
+					reaction.deleteOne()
+					const [newReaction, _] = await Promise.all([
 						this.createReaction(messageId, userId, type),
-						this.messageModel.findByIdAndUpdate(messageId, {$inc: {[`reactions.${reaction.type}`]: -1, [`reactions.${type}`]: 1}}, {new: true}).exec()
+						this.messageModel.updateOne({_id: messageId}, {$inc: {[`reactions.${reaction.type}`]: -1, [`reactions.${type}`]: 1}}).exec()
 					])
-					await this.cacheManager.set(`message:${messageId}`, updatedMessage);
+					await this.cacheManager.set(`message:${messageId}`, message);
 					this.logger.log("addReactionToMessage:::Changed duplicated reaction on a message");
 					return {
-						message: updatedMessage,
+						message: message,
 						reaction: newReaction
 					};
 				}
@@ -1041,16 +1080,18 @@ export class MongodbService {
 
 			const newReaction = await this.createReaction(messageId, userId, type);
 			this.logger.log(`addReactionToMessage:::Added a ${type} by user:${userId} to message:${messageId}`);
-			const [updatedMessage, updatedUser] = await Promise.all([
-				this.messageModel.findByIdAndUpdate(messageId, {$inc: {[`reactions.${type}`]: 1}}, {new: true}).exec(), 
+
+			message.reactions[type]++;
+			const [_, updatedUser] = await Promise.all([
+				this.messageModel.updateOne({_id: messageId}, {$inc: {[`reactions.${type}`]: 1}}).exec(),
 				this.userModel.findByIdAndUpdate(messageData.message.user, {$inc: {likes: 1}}).exec()
 			]);
 			await Promise.all([
-				this.cacheManager.set(`message:${messageId}`, updatedMessage, this.CACHE_TIME),
+				this.cacheManager.set(`message:${messageId}`, message, this.CACHE_TIME),
 				this.cacheManager.set(`user:${updatedUser._id}`, updatedUser)
 			]);
 			return {
-				message: updatedMessage,
+				message: message,
 				reaction: newReaction
 			};
 		} catch(err) {
@@ -1230,6 +1271,24 @@ export class MongodbService {
 		}
 	}
 
+	async findBookmark(userId: string, messageId: string): Promise<BookmarkDocument> {
+		try {
+			const [userData, messageData] = await Promise.all([
+				this.findUserById(userId),
+				this.findMessageById(messageId)
+			]);
+			if(!userData || !userData.user || !messageData || !messageData.message) {
+				this.logger.log("findBookmark:::User or Message not found");
+				return null;
+			}
+
+			const bookmark = await this.bookmarkModel.findOne({user: userId})
+		} catch(err) {
+			this.logger.error(`findBookmark:::${err}`);
+			return null;
+		}
+	}
+
 
 
 
@@ -1398,6 +1457,69 @@ export class MongodbService {
 			return postings;
 		} catch(err) {
 			this.logger.error("findProfilePosting:::", err);
+			return null;
+		}
+	}
+
+
+
+
+
+
+
+
+
+
+
+
+	/* DeletedItem model
+	------------------------------------------------------------------
+	------------------------------------------------------------------
+	------------------------------------------------------------------
+	------------------------------------------------------------------
+	------------------------------------------------------------------
+	------------------------------------------------------------------
+	------------------------------------------------------------------
+	*/
+
+	async createDeletedItem(className: string, item: any): Promise<DeletedItemDocument> {
+		try {
+			const deletedItem = this.deletedItemModel.create({
+				className,
+				item: JSON.stringify(item)
+			});
+
+			this.logger.log(`createDeletedItem:::Created new deletedItem for ${className}:${item}`);
+			return deletedItem;
+		} catch(err) {
+			this.logger.error(`createDeletedItem:::${err}`);
+			return null;
+		}
+	}
+
+	async getDeltedItemById(id: string) {
+		try {
+			const deletedItem = await this.deletedItemModel.findById(id).exec();
+			this.logger.log(`getDeltedItemById:::Found deletedItem:${deletedItem}`);
+
+			switch (deletedItem.className) {
+				case 'Forum':
+					const forum: ForumDocument = JSON.parse(deletedItem.item);
+					return forum;
+
+				case 'Thread':
+					const thread: ThreadDocument = JSON.parse(deletedItem.item);
+					return thread;
+
+				case 'Message':
+					const message: MessageDocument = JSON.parse(deletedItem.item);
+					return message;
+		
+				default:
+					return null;
+			}
+		} catch(err) {
+			this.logger.error(`getDeltedItemById:::${err}`);
 			return null;
 		}
 	}

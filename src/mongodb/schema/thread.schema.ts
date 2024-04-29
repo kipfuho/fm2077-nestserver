@@ -28,9 +28,6 @@ export class Thread {
 	@Prop()
 	views: number;
 
-	@Prop()
-	delete: boolean;
-
 	@Prop({type: {
 		view: {type: Number},
 		reply: {type: Number},
