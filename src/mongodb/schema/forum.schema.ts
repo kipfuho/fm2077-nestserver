@@ -19,10 +19,6 @@ export class Forum {
 	@Prop()
 	messages: number;
 	
-	// is deleted?
-	@Prop()
-	delete: boolean;
-	
 	// define permission for user
 	@Prop({type: {
 		view: {type: Number},

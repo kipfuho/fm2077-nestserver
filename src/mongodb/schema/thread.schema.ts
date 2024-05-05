@@ -4,21 +4,29 @@ import { Tag } from "./tag.schema";
 
 @Schema()
 export class Thread {
+	// forumId
 	@Prop()
 	forum: string;
 
+	// author id
 	@Prop()
 	user: string;
+
+	// prefix id
+	@Prop({type: [{type: String}]})
+	prefix: string[];
 
 	@Prop()
 	title: string;
 
+	// tag for filtering
 	@Prop({type: [{type: Tag}]})
 	tag: Tag[];
 
 	@Prop()
 	create_time: Date;
 
+	// thread update or first message update
 	@Prop()
 	update_time: Date;
 
@@ -27,9 +35,6 @@ export class Thread {
 
 	@Prop()
 	views: number;
-
-	@Prop()
-	delete: boolean;
 
 	@Prop({type: {
 		view: {type: Number},

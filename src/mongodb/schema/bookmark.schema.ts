@@ -3,13 +3,20 @@ import { HydratedDocument } from "mongoose";
 
 @Schema()
 export class Bookmark {
-	// thread bookmarked
+	// message bookmarked
+	@Prop()
+	message: string;
+
+	// thread message belong to
 	@Prop()
 	thread: string;
 
 	// owner of bookmark
 	@Prop()
 	user: string;
+
+	@Prop()
+	detail: string;
 
 	@Prop()
 	create_time: Date;

@@ -30,10 +30,11 @@ import { Public } from "src/auth/public";
 import { CreateUserDto } from "src/interface/create.dto";
 import { MongodbService } from "src/mongodb/mongodb.service";
 import { getFileType } from "src/utils/helper";
-import { CreateProfilePosting, CreateThread, ReplyThread, UpdateEmail, UpdateMessage, UpdatePassword, UpdateSetting, UpdateThread, UpdateUsername } from "./type.dto";
+import { CreateBookmark, CreateProfilePosting, CreateReport, CreateThread, GetThread, ReplyThread, UpdateBookmark, UpdateEmail, UpdateMessage, UpdatePassword, UpdateSetting, UpdateThread, UpdateUsername } from "./type.dto";
 import { AuthService } from "src/auth/auth.service";
 import { JwtService } from "@nestjs/jwt";
 import { enc, SHA256 } from "crypto-js";
+import { Thread } from "src/mongodb/schema/thread.schema";
 
 @Controller("v2")
 export class UserControllerV2 {
@@ -349,6 +350,17 @@ export class UserControllerV2 {
 	}
 
 	@HttpCode(HttpStatus.OK)
+	@Public()
+	@Get("user/filter")
+	async filterUser(@Query('username') username: string) {
+		const users = await this.mongodbService.filterUserByUsername(username);
+		if(!users) {
+			throw new HttpException('Users not found', HttpStatus.BAD_REQUEST);
+		}
+		return users;
+	}
+
+	@HttpCode(HttpStatus.OK)
 	@Post("user/update-username")
 	async updateUsername(@Req() req, @Res({passthrough: true}) res, @Body() body: UpdateUsername) {
 		if(req.user.id !== body.userId) {
@@ -551,11 +563,42 @@ export class UserControllerV2 {
 			}
 			return result.thread;
 		}
-		const threads = await this.mongodbService.findThread(forumId, offset, limit);
+		const threads = await this.mongodbService.findThreads(forumId, offset, limit);
 		if(!threads) {
 			throw new HttpException("Threads not found", HttpStatus.NOT_FOUND);
 		} 
 		return threads;
+	}
+
+	// support getting thread by id or filterOptions
+	@HttpCode(HttpStatus.OK)
+	@Public()
+	@Post("thread/get")
+	async postThreads(@Body() body: GetThread) {
+		const {threadId, forumId, offset, limit, filterOptions} = body;
+		if(threadId) {
+			// increase view count
+			const result = await this.mongodbService.findThreadById(body.threadId, true);
+			if(!result || !result.thread) {
+				throw new HttpException("Thread not found", HttpStatus.NOT_FOUND);
+			}
+			return result.thread;
+		}
+
+		if(filterOptions) {
+			// get filtered threads
+			const threads = await this.mongodbService.filterThread(forumId, offset, limit, filterOptions);
+			if(!threads) {
+				throw new HttpException("Threads not found", HttpStatus.NOT_FOUND);
+			} 
+			return threads;
+		}
+
+		const threads = await this.mongodbService.findThreads(forumId, offset, limit);
+		if(!threads) {
+			throw new HttpException("Threads not found", HttpStatus.NOT_FOUND);
+		} 
+		return threads; 
 	}
 
 	@HttpCode(HttpStatus.OK)
@@ -577,7 +620,7 @@ export class UserControllerV2 {
 		if(!thread) {
 			throw new HttpException("Thread not found", HttpStatus.NOT_FOUND);
 		}
-		const message = await this.mongodbService.findLastestMessage(thread._id.toHexString());
+		const message = await this.mongodbService.findLastestMessage(thread._id);
 		const result = await this.mongodbService.findUserById(message.user);
 		if(result.cache) {
 			const { email, password, setting, ...nonSensitive} = result.user;
@@ -680,13 +723,14 @@ export class UserControllerV2 {
 	@Get("message/get")
 	async getMessage(@Query("threadId") threadId: string, @Query("offset") offset: number, @Query("limit") limit: number, @Query("messageId") messageId: string) {
 		if(messageId) {
-			const message = await this.mongodbService.findMessageById(messageId);
-			if(!message) {
+			const messageData = await this.mongodbService.findMessageById(messageId);
+			if(!messageData || !messageData.message) {
 				throw new HttpException("Message not found", HttpStatus.NOT_FOUND);
 			}
-			return message;
+			return messageData.message;
 		}
-		const messages = await this.mongodbService.findMessage(threadId, offset, limit);
+
+		const messages = await this.mongodbService.findMessages(threadId, offset, limit);
 		if(!messages) {
 			throw new HttpException("Messages not found", HttpStatus.NOT_FOUND);
 		}
@@ -854,5 +898,159 @@ export class UserControllerV2 {
 			throw new HttpException("Alerts not found", HttpStatus.BAD_REQUEST);
 		}
 		return alerts;
+	}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+	/* Bookmark model API
+	-----------------------------------------------------------
+	-----------------------------------------------------------
+	-----------------------------------------------------------
+	-----------------------------------------------------------
+	-----------------------------------------------------------
+	*/
+
+	@HttpCode(HttpStatus.OK)
+	@Post("bookmark/create")
+	async createBookmark(@Req() req: any, @Body() body: CreateBookmark) {
+		if(req.user.id !== body.userId) {
+			throw new HttpException("userId not match", HttpStatus.BAD_REQUEST);
+		}
+		
+		const bookmark = this.mongodbService.createBookmark(body.messageId, body.userId, body.detail);
+
+		if(!bookmark) {
+			throw new HttpException("Error creating new bookmark", HttpStatus.BAD_REQUEST);
+		}
+		return bookmark;
+	}
+
+	@HttpCode(HttpStatus.OK)
+	@Public()
+	@Get("bookmark/get")
+	async getBookmark(@Query('bookmarkId') bookmarkId: string, @Query('userId') userId: string, @Query('current') current: string, @Query('limit') limit: number) {
+		if(bookmarkId) {
+			const bookmark = await this.mongodbService.findBookmarkById(bookmarkId);
+			if(!bookmark) {
+				throw new HttpException("Bookmark not found", HttpStatus.BAD_REQUEST);
+			}
+			return bookmark;
+		}
+
+		const bookmark = await this.mongodbService.findBookmarkOfUser(userId, current, limit);
+		if(!bookmark) {
+			throw new HttpException("Bookmarks not found", HttpStatus.BAD_REQUEST);
+		}
+		return bookmark;
+	}
+
+	@HttpCode(HttpStatus.OK)
+	@Public()
+	@Get("bookmark/check")
+	async checkBookmarkMessage(@Query('messageId') messageId: string, @Query('userId') userId: string) {
+		const bookmark = await this.mongodbService.findBookmarkOfMessage(userId, messageId);
+		if(!bookmark) {
+			throw new HttpException("Bookmarks not found", HttpStatus.BAD_REQUEST);
+		}
+		return bookmark;
+	}
+
+	@HttpCode(HttpStatus.OK)
+	@Post("bookmark/update")
+	async updateBookmark(@Req() req: any, @Body() body: UpdateBookmark) {
+		const bookmark = await this.mongodbService.updateBookmark(body.bookmarkId, req.user.id, body.detail);
+		if(!bookmark) {
+			throw new HttpException("Error updating bookmark", HttpStatus.BAD_REQUEST);
+		}
+		return bookmark;
+	}
+
+	@HttpCode(HttpStatus.OK)
+	@Get("bookmark/delete")
+	async deleteBookmark(@Req() req: any, @Query('bookmarkId') bookmarkId: string) {
+		const result = await this.mongodbService.deleteBookmark(bookmarkId, req.user.id);
+		if(!result) {
+			throw new HttpException("Error deleting bookmark", HttpStatus.BAD_REQUEST);
+		}
+		return result;
+	}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+	/* Report model API
+	-----------------------------------------------------------
+	-----------------------------------------------------------
+	-----------------------------------------------------------
+	-----------------------------------------------------------
+	-----------------------------------------------------------
+	*/
+
+	@HttpCode(HttpStatus.OK)
+	@Post("report/create")
+	async createReport(@Req() req: any, @Body() body: CreateReport) {
+		if(req.user.id !== body.userId) {
+			throw new HttpException("Error creating new report, userId not match", HttpStatus.BAD_REQUEST);
+		}
+
+		const report = await this.mongodbService.createReport(body.messageId, body.userId, body.reason, body.detail);
+		if(!report) {
+			throw new HttpException("Error creating new report", HttpStatus.BAD_REQUEST);
+		}
+		return report;
+	}
+
+	// ?
+	@HttpCode(HttpStatus.OK)
+	@Public()
+	@Get("report/get")
+	async getReport(@Query('reportId') reportId: string, @Query('userId') userId: string, @Query('current') current: string, @Query('limit') limit: number) {
+		if(reportId) {
+			const report = await this.mongodbService.findReportById(reportId);
+			if(!report) {
+				throw new HttpException("Report not found", HttpStatus.BAD_REQUEST);
+			}
+			return report;
+		}
+
+		const reports = await this.mongodbService.findReportOfUser(userId, current, limit ?? 20);
+		if(!reports) {
+			throw new HttpException("Reports not found", HttpStatus.BAD_REQUEST);
+		}
+		return reports;
+	}
+
+	// ?
+	@HttpCode(HttpStatus.OK)
+	@Public()
+	@Get("report/check")
+	async checkReport(@Query('messageId') messageId: string, @Query('userId') userId: string) {
+		const report = await this.mongodbService.checkReportUser(messageId, userId);
+		if(!report) {
+			throw new HttpException("Report not found", HttpStatus.BAD_REQUEST);
+		}
+		return report;
 	}
 }
