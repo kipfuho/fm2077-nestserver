@@ -235,7 +235,7 @@ export class MongodbController {
 	@Public()
 	@Get("thread/get-from-forum")
 	async getThreadMany(@Query("forumId") forumId: string, @Query("offset") offset: number, @Query("limit") limit: number) {
-		const threads = await await this.mongodbService.findThread(forumId, offset, limit);
+		const threads = await await this.mongodbService.findThreads(forumId, offset, limit);
 		if(!threads) {
 			throw new HttpException("Threads not found" ,HttpStatus.NOT_FOUND);
 		}

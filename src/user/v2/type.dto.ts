@@ -1,4 +1,5 @@
-import { IsString } from "class-validator";
+import { IsNumber, IsString } from "class-validator";
+import { FilterOptions } from "src/interface/filter.type";
 import { Tag } from "src/mongodb/schema/tag.schema";
 
 export class CreateThread {
@@ -15,6 +16,21 @@ export class CreateThread {
 	threadContent: string;
 
 	tag: Tag[];
+}
+
+export class GetThread {
+	threadId: string;
+
+	@IsString()
+	forumId: string;
+
+	@IsNumber()
+	offset: number;
+
+	@IsNumber()
+	limit: number
+
+	filterOptions: FilterOptions;
 }
 
 export class ReplyThread {
@@ -39,6 +55,30 @@ export class CreateProfilePosting {
 
 	@IsString()
 	message: string;
+}
+
+export class CreateBookmark {
+	@IsString()
+	messageId: string;
+
+	@IsString()
+	userId: string;
+
+	@IsString()
+	detail: string;
+}
+
+export class CreateReport {
+	@IsString()
+	messageId: string;
+
+	@IsString()
+	userId: string;
+
+	@IsString()
+	reason: string;
+
+	detail: string;
 }
 
 export class UpdateThread {
@@ -116,4 +156,10 @@ export class UpdateSetting {
 
 	@IsString()
 	password: string;
+}
+
+export class UpdateBookmark {
+	bookmarkId: string;
+
+	detail: string;
 }

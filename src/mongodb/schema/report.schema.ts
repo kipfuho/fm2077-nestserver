@@ -15,7 +15,12 @@ export class Report {
 	@Prop()
 	message: string;
 
-	// detail, reason
+	// reason for the report
+	// can be spam, duplicated, inappropriate content, etc
+	@Prop()
+	reason: string;
+
+	// detail
 	@Prop()
 	detail: string;
 
