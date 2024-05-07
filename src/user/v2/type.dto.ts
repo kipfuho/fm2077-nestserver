@@ -1,165 +1,162 @@
-import { IsNumber, IsString } from "class-validator";
-import { FilterOptions } from "src/interface/filter.type";
-import { Tag } from "src/mongodb/schema/tag.schema";
+import { IsNumber, IsString } from 'class-validator';
+import { FilterOptions } from 'src/interface/filter.type';
+import { Tag } from 'src/mongodb/schema/tag.schema';
 
 export class CreateThread {
-	@IsString()
-	forumId: string;
+  @IsString()
+  forumId: string;
 
-	@IsString()
-	userId: string;
+  @IsString()
+  userId: string;
 
-	@IsString()
-	threadTitle: string;
+  @IsString()
+  threadTitle: string;
 
-	@IsString()
-	threadContent: string;
+  @IsString()
+  threadContent: string;
 
-	tag: Tag[];
+  tag: Tag[];
 }
 
 export class GetThread {
-	threadId: string;
+  threadId: string;
 
-	@IsString()
-	forumId: string;
+  @IsString()
+  forumId: string;
 
-	@IsNumber()
-	offset: number;
+  @IsNumber()
+  offset: number;
 
-	@IsNumber()
-	limit: number
+  @IsNumber()
+  limit: number;
 
-	filterOptions: FilterOptions;
+  filterOptions: FilterOptions;
 }
 
 export class ReplyThread {
-	@IsString()
-	threadId: string;
-	
-	@IsString()
-	userId: string;
+  @IsString()
+  threadId: string;
 
-	@IsString()
-	content: string;
-	
-	attachments: string[];
+  @IsString()
+  userId: string;
+
+  @IsString()
+  content: string;
+
+  attachments: string[];
 }
 
 export class CreateProfilePosting {
-	@IsString()
-	userId: string;
+  @IsString()
+  userId: string;
 
-	@IsString()
-	userWallId: string;
+  @IsString()
+  userWallId: string;
 
-	@IsString()
-	message: string;
+  @IsString()
+  message: string;
 }
 
 export class CreateBookmark {
-	@IsString()
-	messageId: string;
+  @IsString()
+  messageId: string;
 
-	@IsString()
-	userId: string;
+  @IsString()
+  userId: string;
 
-	@IsString()
-	detail: string;
+  @IsString()
+  detail: string;
 }
 
 export class CreateReport {
-	@IsString()
-	messageId: string;
+  @IsString()
+  messageId: string;
 
-	@IsString()
-	userId: string;
+  @IsString()
+  userId: string;
 
-	@IsString()
-	reason: string;
+  @IsString()
+  reason: string;
 
-	detail: string;
+  detail: string;
 }
 
 export class UpdateThread {
-	@IsString()
-	threadId: string;
-	
-	@IsString()
-	userId: string;
-	
-	threadPrefix: string;
+  @IsString()
+  threadId: string;
 
-	@IsString()
-	threadTitle: string;
+  @IsString()
+  userId: string;
 
-	threadContent: string;
+  threadPrefix: string;
 
-	tag: Tag[];
+  @IsString()
+  threadTitle: string;
+
+  threadContent: string;
+
+  tag: Tag[];
 }
 
 export class UpdateMessage {
-	@IsString()
-	messageId: string;
+  @IsString()
+  messageId: string;
 
-	@IsString()
-	userId: string;
-
-	@IsString()
-	content: string;
+  @IsString()
+  content: string;
 }
 
 export class UpdateUsername {
-	@IsString()
-	userId: string;
+  @IsString()
+  userId: string;
 
-	@IsString()
-	username: string;
+  @IsString()
+  username: string;
 
-	@IsString()
-	password: string;
+  @IsString()
+  password: string;
 }
 
 export class UpdateEmail {
-	@IsString()
-	userId: string;
+  @IsString()
+  userId: string;
 
-	@IsString()
-	email: string;
+  @IsString()
+  email: string;
 
-	@IsString()
-	password: string;
+  @IsString()
+  password: string;
 }
 
 export class UpdatePassword {
-	@IsString()
-	userId: string;
+  @IsString()
+  userId: string;
 
-	@IsString()
-	oldPassword: string;
+  @IsString()
+  oldPassword: string;
 
-	@IsString()
-	password: string;
+  @IsString()
+  password: string;
 }
 
 export class UpdateSetting {
-	@IsString()
-	userId: string;
+  @IsString()
+  userId: string;
 
-	avatar: string;
+  avatar: string;
 
-	dob: Date;
+  dob: Date;
 
-	location: string;
+  location: string;
 
-	about: string;
+  about: string;
 
-	@IsString()
-	password: string;
+  @IsString()
+  password: string;
 }
 
 export class UpdateBookmark {
-	bookmarkId: string;
+  bookmarkId: string;
 
-	detail: string;
+  detail: string;
 }

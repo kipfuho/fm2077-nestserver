@@ -1,6 +1,7 @@
 import { Prop, Schema, SchemaFactory } from "@nestjs/mongoose";
 import { HydratedDocument } from "mongoose";
 import { Tag } from "./tag.schema";
+import { Prefix } from "./prefix.schema";
 
 @Schema()
 export class Thread {
@@ -12,9 +13,9 @@ export class Thread {
 	@Prop()
 	user: string;
 
-	// prefix id
-	@Prop({type: [{type: String}]})
-	prefix: string[];
+	// prefix
+	@Prop({type: [{type: Prefix}]})
+	prefix: Prefix[];
 
 	@Prop()
 	title: string;

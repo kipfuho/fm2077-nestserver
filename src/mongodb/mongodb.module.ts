@@ -20,6 +20,7 @@ import { Rating, RatingSchema } from './schema/rating.schema';
 import { ProfilePosting, ProfilePostingSchema } from './schema/profileposting.schema';
 import { Report, ReportSchema } from './schema/report.schema';
 import { DeletedItem, DeletedItemSchema } from './schema/deleted.schema';
+import { Prefix, PrefixSchema } from './schema/prefix.schema';
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { DeletedItem, DeletedItemSchema } from './schema/deleted.schema';
       {name: Rating.name, schema: RatingSchema},
       {name: ProfilePosting.name, schema: ProfilePostingSchema},
       {name: Report.name, schema: ReportSchema},
+      {name: Prefix.name, schema: PrefixSchema},
       {name: DeletedItem.name, schema: DeletedItemSchema},
     ]),
     CacheModule.registerAsync<RedisClientOptions>({
