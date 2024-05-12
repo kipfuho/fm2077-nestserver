@@ -9,6 +9,8 @@ export class CreateThread {
   @IsString()
   userId: string;
 
+  prefixIds: number[];
+
   @IsString()
   threadTitle: string;
 
@@ -57,6 +59,17 @@ export class CreateProfilePosting {
   message: string;
 }
 
+export class ReplyProfilePosting {
+  @IsString()
+  ppId: string;
+
+  @IsString()
+  userId: string;
+
+  @IsString()
+  message: string;
+}
+
 export class CreateBookmark {
   @IsString()
   messageId: string;
@@ -85,10 +98,8 @@ export class UpdateThread {
   @IsString()
   threadId: string;
 
-  @IsString()
-  userId: string;
-
-  threadPrefix: string;
+  // list of prefix
+  threadPrefixIds: number[];
 
   @IsString()
   threadTitle: string;

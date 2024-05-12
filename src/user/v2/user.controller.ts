@@ -39,6 +39,7 @@ import {
   CreateReport,
   CreateThread,
   GetThread,
+  ReplyProfilePosting,
   ReplyThread,
   UpdateBookmark,
   UpdateEmail,
@@ -234,7 +235,7 @@ export class UserControllerV2 {
       email,
       SHA256(password).toString(enc.Hex),
     );
-    if (result) {
+    if(result) {
       this.logger.log('API /v2/register succeeded' + createUserDto);
       await this.mongodbService.createVerifyCode(result._id.toHexString());
       return {
@@ -409,6 +410,18 @@ export class UserControllerV2 {
     }
   }
 
+  // return statistics of user's thread posting among different forums
+  @HttpCode(HttpStatus.OK)
+  @Public()
+  @Get('user/get-post-stats')
+  async getUserPostStats(@Query('userId') userId: string) {
+    const stats = await this.mongodbService.statisticsUserPosting(userId);
+    if(!stats) {
+      throw new HttpException('Error statistics user posting area', HttpStatus.BAD_REQUEST);
+    }
+    return stats;
+  }
+
   @HttpCode(HttpStatus.OK)
   @Public()
   @Get('user/filter')
@@ -547,6 +560,20 @@ export class UserControllerV2 {
       throw new HttpException('Verification failed', HttpStatus.BAD_REQUEST);
     }
     return true;
+  }
+
+  @HttpCode(HttpStatus.OK)
+  @Get('user/check-follow')
+  async checkFollow(@Req() req: any, @Query('userId') userId: string) {
+    const result = await this.mongodbService.checkFollowUser(req.user.id, userId);
+    return result;
+  }
+
+  @HttpCode(HttpStatus.OK)
+  @Get('user/follow')
+  async followUser(@Req() req: any, @Query('userId') userId: string) {
+    const result = await this.mongodbService.followUser(req.user.id, userId);
+    return result;
   }
 
   /* Category model API
@@ -726,17 +753,22 @@ export class UserControllerV2 {
 
   @HttpCode(HttpStatus.OK)
   @Post('thread/create')
-  async createThread(@Req() req: any, @Body() body: CreateThread) {
+  async createThread(
+    @Req() req: any,
+    @Body() body: CreateThread
+  ) {
     if (req.user.id !== body.userId) {
       throw new HttpException('User not match', HttpStatus.BAD_REQUEST);
     }
     const thread = await this.mongodbService.createThread(
       body.forumId,
       body.userId,
+      body.prefixIds,
       body.threadTitle,
       body.tag,
     );
-    if (!thread) {
+
+    if(!thread) {
       throw new HttpException('Error creating', HttpStatus.BAD_REQUEST);
     }
     const message = await this.mongodbService.createMessage(
@@ -749,17 +781,19 @@ export class UserControllerV2 {
 
   @HttpCode(HttpStatus.OK)
   @Post('/thread/update')
-  async updateThread(@Req() req: any, @Body() body: UpdateThread) {
-    if (req.user.id !== body.userId) {
-      throw new HttpException('User not match', HttpStatus.BAD_REQUEST);
-    }
+  async updateThread(
+    @Req() req: any,
+    @Body() body: UpdateThread
+  ) {
     const result = await this.mongodbService.editThread(
       body.threadId,
-      body.threadPrefix,
+      req.user.id,
+      body.threadPrefixIds,
       body.threadTitle,
       body.threadContent,
       body.tag,
     );
+
     if (!result) {
       throw new HttpException('Error updating', HttpStatus.BAD_REQUEST);
     }
@@ -970,7 +1004,7 @@ export class UserControllerV2 {
 	*/
 
   @HttpCode(HttpStatus.OK)
-  @Post('profileposting/add')
+  @Post('profileposting/create')
   async createProfilePosting(@Body() body: CreateProfilePosting) {
     const profilePosting = await this.mongodbService.createProfilePosting(
       body.userId,
@@ -990,6 +1024,26 @@ export class UserControllerV2 {
   }
 
   @HttpCode(HttpStatus.OK)
+  @Post('profileposting/reply')
+  async replyProfilePosting(@Body() body: ReplyProfilePosting) {
+    const profilePosting = await this.mongodbService.replyProfilePosting(
+      body.ppId,
+      body.userId,
+      body.message,
+    );
+    if (!profilePosting) {
+      throw new HttpException(
+        'Error replying profile posting',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    return {
+      message: 'Replied profile posting',
+      item: profilePosting,
+    };
+  }
+
+  @HttpCode(HttpStatus.OK)
   @Public()
   @Get('profileposting/get')
   async getProfilePosting(
@@ -1000,7 +1054,7 @@ export class UserControllerV2 {
     const profilePostings = await this.mongodbService.findProfilePosting(
       userWallId,
       current,
-      limit ?? 20,
+      limit ?? 5,
     );
     if (!profilePostings) {
       throw new HttpException(
@@ -1219,7 +1273,6 @@ export class UserControllerV2 {
     return reports;
   }
 
-  // ?
   @HttpCode(HttpStatus.OK)
   @Public()
   @Get('report/check')
@@ -1241,28 +1294,6 @@ export class UserControllerV2 {
 	-----------------------------------------------------------
 	-----------------------------------------------------------
 	*/
-
-  @HttpCode(HttpStatus.OK)
-  @Public()
-  @Get('prefix/create')
-  async createPrefix(
-    @Query('name') name: string,
-    @Query('color') color: string,
-  ) {
-    if (color) {
-      const prefix = await this.mongodbService.createPrefix(name, color);
-      if (!prefix) {
-        throw new HttpException('Prefix not found', HttpStatus.BAD_REQUEST);
-      }
-      return prefix;
-    } else {
-      const prefix = await this.mongodbService.createPrefix(name);
-      if (!prefix) {
-        throw new HttpException('Prefix not found', HttpStatus.BAD_REQUEST);
-      }
-      return prefix;
-    }
-  }
 
   @HttpCode(HttpStatus.OK)
   @Public()

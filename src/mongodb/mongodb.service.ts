@@ -23,6 +23,7 @@ import { Report, ReportDocument } from './schema/report.schema';
 import { DeletedItem, DeletedItemDocument } from './schema/deleted.schema';
 import { FilterOptions } from 'src/interface/filter.type';
 import { Prefix, PrefixDocument } from './schema/prefix.schema';
+import { ppid } from 'process';
 
 @Injectable()
 export class MongodbService {
@@ -402,6 +403,55 @@ export class MongodbService {
     }
   }
 
+  // check if user1 follow user2
+  async checkFollowUser(userId1: string, userId2: string): Promise<boolean> {
+    try {
+      const user1Data = await this.findUserById(userId1);
+      if(user1Data.user) {
+        this.logger.log(`checkFollowUser:::${userId2}`);
+        return user1Data.user.followings.includes(userId2);
+      }
+      return false;
+    } catch(err) {
+      this.logger.error(`checkFollowUser:::${err}`);
+      return false;
+    }
+  }
+
+  // user1 follow user2
+  async followUser(user1Id: string, user2Id: string): Promise<boolean> {
+    try {
+      const [user1, user2] = await Promise.all([
+        this.userModel.findById(user1Id),
+        this.userModel.findById(user2Id)
+      ]);
+
+      // unfollow if user1 has already followed user2
+      if(user2.followers.includes(user1Id)) {
+        user1.followings = user1.followings.filter((id) => id !== user2Id);
+        user2.followers = user2.followers.filter((id) => id !== user1Id);
+        await Promise.all([
+          user1.save(),
+          user2.save()
+        ]);
+
+        return false;
+      } else {
+        user1.followings.push(user2Id);
+        user2.followers.push(user1Id);
+        await Promise.all([
+          user1.save(),
+          user2.save()
+        ]);
+
+        return true;
+      }
+    } catch(err) {
+      this.logger.error(`followUser:::${err}`);
+      return false;
+    }
+  }
+
   /* Category model
 	------------------------------------------------------------------
 	------------------------------------------------------------------
@@ -565,6 +615,40 @@ export class MongodbService {
     }
   }
 
+  async findAllForums(): Promise<ForumDocument[]> {
+    try {
+      const forums = await this.forumModel.find();
+      this.logger.log(`findAllForums:::DB:::Found forums`);
+      return forums;
+    } catch(err) {
+      this.logger.error(`findAllForum:::${err}`);
+      return null;
+    }
+  }
+
+  async statisticsUserPosting(userId: string): Promise<Array<{forum: ForumDocument, count: number}>> {
+    try {
+      const forums = await this.findAllForums();
+      const stats = await Promise.all(
+        forums.map(async (forum) => {
+          return {
+            forum,
+            count: await this.threadModel.countDocuments({
+              forum: forum._id.toHexString(),
+              user: userId
+            })
+          }
+        })
+      );
+      
+      this.logger.log(`statisticsUserPosting:::Statistics for user:${userId}`);
+      return stats;
+    } catch(err) {
+      this.logger.error(`statisticsUserPosting:::${err}`);
+      return null;
+    }
+  }
+
   /* Thread model
 	------------------------------------------------------------------
 	------------------------------------------------------------------
@@ -578,6 +662,7 @@ export class MongodbService {
   async createThread(
     forumId: string,
     userId: string,
+    prefixIds: number[],
     title: string,
     tag: Tag[],
   ): Promise<ThreadDocument> {
@@ -592,9 +677,15 @@ export class MongodbService {
       }
 
       const time = new Date();
+      const prefixes = await Promise.all(
+        prefixIds.map(async (prefixId) => {
+          return (await this.findPrefixById(prefixId)).prefix;
+        })
+      );
       const thread = await this.threadModel.create({
         forum: forumId,
         user: userId,
+        prefix: prefixes,
         title,
         tag,
         create_time: time,
@@ -903,28 +994,41 @@ export class MongodbService {
 
   async editThread(
     threadId: string,
-    threadPrefix: string = '',
+    userId: string,
+    threadPrefixIds: number[],
     threadTitle: string,
     threadContent: string,
     tag: Tag[],
   ): Promise<ThreadDocument> {
     try {
       const time = new Date();
-      const thread = await this.threadModel
-        .findByIdAndUpdate(
-          threadId,
-          { title: threadTitle, update_time: time, tag: tag },
-          { new: true },
-        )
-        .exec();
+      const thread = await this.threadModel.findById(threadId);
+      if(thread.user !== userId) {
+        this.logger.log('User not match');
+        return null;
+      }
+      if(threadTitle.length > 0) {
+        thread.title = threadTitle;
+      }
+      await Promise.all(
+        threadPrefixIds.map(async (prefixId) => {
+          if(thread.prefix.every((prefix) => prefix.id !== prefixId)) {
+            thread.prefix.push((await this.findPrefixById(prefixId)).prefix);
+          }
+        })
+      );
+      if(tag) {
+        thread.tag.concat(...tag);
+      }
       if (threadContent) {
         await this.messageModel
-          .updateOne(
-            { thread: threadId },
-            { content: threadContent, update_time: time },
-          )
-          .exec();
+        .updateOne(
+          { thread: threadId },
+          { content: threadContent, update_time: time },
+        )
+        .exec();
       }
+      await thread.save();
       this.logger.log(`editThread:::Updated thread, id=${threadId}`);
       return thread;
     } catch (err) {
@@ -1884,12 +1988,13 @@ export class MongodbService {
       const time = new Date();
       const profilePosting = await this.profilepostingModel.create({
         user: userId,
-        userWall: userWallId,
+        user_wall: userWallId,
         message,
         create_time: time,
+        replies: []
       });
       this.logger.log(
-        `createProfilePosting:::Created new rating, id=${profilePosting._id}`,
+        `createProfilePosting:::Created new rating, id=${profilePosting._id.toHexString()}`,
       );
       return profilePosting;
     } catch (err) {
@@ -1964,6 +2069,42 @@ export class MongodbService {
       return postings;
     } catch (err) {
       this.logger.error('findProfilePosting:::', err);
+      return null;
+    }
+  }
+  
+  // ppId: profilePosting id
+  // add a mew reply for a profile posting
+  async replyProfilePosting(ppId: string, userId: string, message: string): Promise<ProfilePostingDocument> {
+    try {
+      const [profilePosting, user] = await Promise.all([
+        this.profilepostingModel.findById(ppid),
+        this.findUserById(userId)
+      ]);
+
+      if(!user || !user.user || !profilePosting) {
+        this.logger.log('replyProfilePosting:::User not found');
+        return null;
+      }
+      // limit to at most 100 replies per profile posting
+      if(profilePosting.replies.length > 100) {
+        this.logger.log("replyProfilePosting:::Profileposting's number of replies maxed!");
+        return null;
+      }
+
+      // create new reply and push it to profile posting
+      const time = new Date();
+      profilePosting.replies.push({
+        user: userId,
+        message,
+        create_time: time
+      });
+
+      await profilePosting.save();
+      this.logger.log(`replyProfilePosting:::created new reply for profileposting:${ppId}`);
+      return profilePosting;
+    } catch(err) {
+      this.logger.error(`replyProfilePosting:::${err}`);
       return null;
     }
   }

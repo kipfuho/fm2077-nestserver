@@ -4,6 +4,7 @@ import { Public } from 'src/auth/public';
 import { enc, SHA256 } from 'crypto-js';
 import { TagDocument } from './schema/tag.schema';
 import { CategoryDocument } from './schema/category.schema';
+import { CreateProfilePosting } from 'src/user/v2/type.dto';
 
 @Controller('mongodb')
 export class MongodbController {
@@ -199,20 +200,9 @@ export class MongodbController {
 
 	@HttpCode(HttpStatus.CREATED)
 	@Public()
-	@Get("thread/create")
-	async createThread(@Query("forumId") forumId: string, @Query("userId") userId: string, @Query("about") title: string, tag: TagDocument[] = []) {
-		const thread = await this.mongodbService.createThread(forumId, userId, title, tag);
-		if(!thread) {
-			throw new HttpException("Failed", HttpStatus.NOT_MODIFIED);
-		}
-		return thread;
-	}
-
-	@HttpCode(HttpStatus.CREATED)
-	@Public()
 	@Post("thread/create")
 	async createThread2(@Body() body) {
-		const thread = await this.mongodbService.createThread(body.forumId, body.userId, body.title, body.tag);
+		const thread = await this.mongodbService.createThread(body.forumId, body.userId, body.prefixIds, body.title, body.tag);
 		if(!thread) {
 			throw new HttpException("Failed", HttpStatus.NOT_MODIFIED);
 		}
@@ -235,7 +225,7 @@ export class MongodbController {
 	@Public()
 	@Get("thread/get-from-forum")
 	async getThreadMany(@Query("forumId") forumId: string, @Query("offset") offset: number, @Query("limit") limit: number) {
-		const threads = await await this.mongodbService.findThreads(forumId, offset, limit);
+		const threads = await this.mongodbService.findThreads(forumId, offset, limit);
 		if(!threads) {
 			throw new HttpException("Threads not found" ,HttpStatus.NOT_FOUND);
 		}
@@ -322,4 +312,68 @@ export class MongodbController {
 		const alert = await this.mongodbService.createAlert(body.userId, body.detail);
 		return alert;
 	}
+
+
+	/* Prefix
+	-----------------------------------------------------------
+	-----------------------------------------------------------
+	-----------------------------------------------------------
+	-----------------------------------------------------------
+	-----------------------------------------------------------
+	*/
+
+	@HttpCode(HttpStatus.OK)
+  @Public()
+  @Get('prefix/create')
+  async createPrefix(
+    @Query('name') name: string,
+    @Query('color') color: string,
+  ) {
+    if (color) {
+      const prefix = await this.mongodbService.createPrefix(name, color);
+      if (!prefix) {
+        throw new HttpException('Error creating prefix', HttpStatus.BAD_REQUEST);
+      }
+      return prefix;
+    } else {
+      const prefix = await this.mongodbService.createPrefix(name);
+      if (!prefix) {
+        throw new HttpException('Error creating prefix', HttpStatus.BAD_REQUEST);
+      }
+      return prefix;
+    }
+  }
+
+
+
+
+
+	/* Profileposting
+	-----------------------------------------------------------
+	-----------------------------------------------------------
+	-----------------------------------------------------------
+	-----------------------------------------------------------
+	-----------------------------------------------------------
+	*/
+
+	@HttpCode(HttpStatus.OK)
+	@Public()
+  @Post('profileposting/create')
+  async createProfilePosting(@Body() body: CreateProfilePosting) {
+    const profilePosting = await this.mongodbService.createProfilePosting(
+      body.userId,
+      body.userWallId,
+      body.message,
+    );
+    if (!profilePosting) {
+      throw new HttpException(
+        'Error creating new profile posting',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    return {
+      message: 'Created new profile posting',
+      item: profilePosting,
+    };
+  }
 }
