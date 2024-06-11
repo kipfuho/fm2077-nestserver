@@ -1,6 +1,6 @@
 export class FilterOptions {
 	// id of prefix
-	prefix: string[];
+	prefix: number[];
 
 	// id of user made the thread
 	author: string;

@@ -23,7 +23,6 @@ import { Report, ReportDocument } from './schema/report.schema';
 import { DeletedItem, DeletedItemDocument } from './schema/deleted.schema';
 import { FilterOptions } from 'src/interface/filter.type';
 import { Prefix, PrefixDocument } from './schema/prefix.schema';
-import { ppid } from 'process';
 
 @Injectable()
 export class MongodbService {
@@ -62,6 +61,10 @@ export class MongodbService {
 	------------------------------------------------------------------
 	*/
 
+  /**
+   * Get metadata of the forum
+   * @returns threads count, messages count, members count, lastest member
+   */
   async getMetadata(): Promise<[number, number, number, string]> {
     try {
       const [threadCount, messageCount, memberCount, lastMember] =
@@ -88,6 +91,13 @@ export class MongodbService {
 	------------------------------------------------------------------
 	*/
 
+  /**
+   * Create a new user
+   * @param username 
+   * @param email 
+   * @param password 
+   * @returns User
+   */
   async createUser(
     username: string,
     email: string,
@@ -135,8 +145,14 @@ export class MongodbService {
     }
   }
 
-  // Will also cache to redis
-  async findUserById(id: string): Promise<{
+  /**
+   * Find user by id and cache to redis
+   * @param id 
+   * @returns User
+   */
+  async findUserById(
+    id: string
+  ): Promise<{
     cache: boolean;
     user: UserDocument;
   }> {
@@ -163,8 +179,14 @@ export class MongodbService {
     }
   }
 
-  // identity can be either username or email
-  async findUserByName(identity: string): Promise<UserDocument> {
+  /**
+   * Find user by username or by email
+   * @param identity : either username or email
+   * @returns User
+   */
+  async findUserByName(
+    identity: string
+  ): Promise<UserDocument> {
     try {
       const user = await this.userModel
         .findOne({
@@ -183,7 +205,14 @@ export class MongodbService {
     return await this.userModel.find().exec();
   }
 
-  async filterUserByUsername(usernamePart: string): Promise<UserDocument[]> {
+  /**
+   * Filter users by username
+   * @param usernamePart 
+   * @returns User[]
+   */
+  async filterUserByUsername(
+    usernamePart: string
+  ): Promise<UserDocument[]> {
     try {
       const users = this.userModel
         .find({ username: { $regex: `^${usernamePart}`, $options: 'i' } })
@@ -196,6 +225,13 @@ export class MongodbService {
     }
   }
 
+  /**
+   * Update an user username
+   * @param userId : user to update
+   * @param password : used for verification
+   * @param username : new username
+   * @returns User
+   */
   async editUsernameUser(
     userId: string,
     password: string,
@@ -230,6 +266,13 @@ export class MongodbService {
     }
   }
 
+  /**
+   * Update an user email
+   * @param userId : user to update
+   * @param password : used for verification
+   * @param email : new email
+   * @returns User
+   */
   async editEmailUser(
     userId: string,
     password: string,
@@ -260,6 +303,16 @@ export class MongodbService {
     }
   }
 
+  /**
+   * Update user setting
+   * @param userId : user to update
+   * @param password 
+   * @param avatar 
+   * @param dob 
+   * @param location 
+   * @param about 
+   * @returns 
+   */
   async editUserSetting(
     userId: string,
     password: string,
@@ -960,7 +1013,7 @@ export class MongodbService {
     try {
       const filters: any = { forum: forumId };
       if (filterOptions.prefix) {
-        filters.prefix = { $all: filterOptions.prefix };
+        filters['prefix.id'] = { $all: filterOptions.prefix };
       }
       if (filterOptions.author) {
         filters.user = (await this.findUserByName(filterOptions.author))._id;
@@ -968,6 +1021,8 @@ export class MongodbService {
       if (filterOptions.last_update_within) {
         filters.update_time = { $gt: filterOptions.last_update_within };
       }
+
+      console.log(filters);
 
       const [threads, totalDocuments] = await Promise.all([
         this.threadModel
@@ -992,6 +1047,167 @@ export class MongodbService {
     }
   }
 
+  /**
+   * Search threads satisfy the following:
+   * 
+   * Title includes searchTitle
+   * 
+   * Created by member if member is provided
+   * @param searchTitle : search value
+   * @param member : author of thread (id string)
+   * @param offset : number records will skip
+   * @param limit : number records return
+   * @returns ThreadDocument[]
+   */
+  async searchThread(
+    searchTitle: string,
+    member: string,
+    offset: number,
+    limit: number
+  ): Promise<ThreadDocument[]> {
+    try {
+      // Return threads made by member if member is provided
+      if(member) {
+        // Check if member exist
+        const mem = await this.findUserByName(member);
+        if(mem) {
+          return await this.threadModel
+            .find({title: { $regex: searchTitle, $options: 'i' }, user: mem._id.toHexString()})
+            .skip(offset)
+            .limit(limit)
+            .exec();
+        }
+        else return null;
+      }
+      else {
+        return await this.threadModel
+        .find({title: { $regex: searchTitle, $options: 'i' }})
+        .skip(offset)
+        .limit(limit)
+        .exec();
+      }
+    } catch(err) {
+      this.logger.error(`searchThread:::${err}`);
+      return null;
+    }
+  }
+
+  /**
+   * Search threads of a forum satisfy the following:
+   * 
+   * Title includes searchTitle
+   * 
+   * Created by member if member is provided
+   * @param forumId : forum to search
+   * @param searchTitle : title to search
+   * @param member : member to search if provided
+   * @param offset : number records skip
+   * @param limit : number records return
+   * @returns Thread[]
+   */
+  async searchThreadForum(
+    forumId: string,
+    searchTitle: string,
+    member: string,
+    offset: number,
+    limit: number
+  ): Promise<ThreadDocument[]> {
+    try {
+      // Return threads made by member if member is provided
+      if(member) {
+        // Check if member exist
+        const mem = await this.findUserByName(member);
+        if(mem) {
+          const threads = await this.threadModel
+            .find({forum: forumId, title: { $regex: searchTitle, $options: 'i' }, user: mem._id.toHexString()})
+            .skip(offset)
+            .limit(limit)
+            .exec();
+
+          this.logger.log(`searchThreadForum:::Found threads: ${threads}`);
+          return threads;
+        }
+        else return null;
+      }
+      else {
+        const threads = await this.threadModel
+        .find({forum: forumId, title: { $regex: searchTitle, $options: 'i' }})
+        .skip(offset)
+        .limit(limit)
+        .exec();
+
+        this.logger.log(`searchThreadForum:::Found threads: ${threads}`);
+        return threads;
+      }
+    } catch(err) {
+      this.logger.error(`searchThread:::${err}`);
+      return null;
+    }
+  }
+
+  /**
+   * Count number of documents of a given search query
+   * @param forumId : forum to search
+   * @param searchTitle : title to search
+   * @param member : member made the thread
+   * @returns Number of threads
+   */
+  async countSearchThreads(
+    forumId: string,
+    searchTitle: string,
+    member: string
+  ): Promise<number> {
+    try {
+      let threadCount: number;
+      if(forumId) {
+        if(member) {
+          const mem = await this.findUserByName(member);
+          threadCount = await this.threadModel
+            .find({forum: forumId, title: { $regex: searchTitle, $options: 'i' }, user: mem._id.toHexString()})
+            .countDocuments()
+            .exec();
+        }
+        else {
+          threadCount = await this.threadModel
+            .find({forum: forumId, title: { $regex: searchTitle, $options: 'i' }})
+            .countDocuments()
+            .exec();
+        }
+      }
+      else {
+        if(member) {
+          const mem = await this.findUserByName(member);
+          threadCount = await this.threadModel
+            .find({title: { $regex: searchTitle, $options: 'i' }, user: mem._id.toHexString()})
+            .countDocuments()
+            .exec();
+        }
+        else {
+          threadCount = await this.threadModel
+            .find({title: { $regex: searchTitle, $options: 'i' }})
+            .countDocuments()
+            .exec();
+        }
+      }
+
+      this.logger.log(`countSearchThreads:::Found ${threadCount} documents`);
+      return threadCount;
+    } catch(err) {
+      this.logger.error(`countSearchThreads:::${err}`);
+      return 0;
+    }
+  }
+
+  /**
+   * Update a thread to new value
+   * @param threadId : thread to update
+   * @param userId : userId for verification
+   * @param threadPrefixIds : new prefixes
+   * @param threadTitle : new title
+   * @param threadContent : new content
+   * @param tag : new tag
+   * @returns Updated thread
+   */
   async editThread(
     threadId: string,
     userId: string,
@@ -1105,7 +1321,11 @@ export class MongodbService {
     }
   }
 
-  // Will also cache to redis
+  /**
+   * Find message by id and cache to Redis
+   * @param messageId 
+   * @returns Message
+   */
   async findMessageById(messageId: string): Promise<{
     cache: boolean;
     message: MessageDocument;
@@ -1135,6 +1355,11 @@ export class MongodbService {
     }
   }
 
+  /**
+   * Find latest message of a thread
+   * @param threadId : thread to find
+   * @returns Message
+   */
   async findLastestMessage(
     threadId: string | Types.ObjectId,
   ): Promise<MessageDocument> {
@@ -1223,6 +1448,7 @@ export class MongodbService {
     messageId: string,
 		userId: string,
     content: string,
+    attachments: string[]
   ): Promise<MessageDocument> {
     try {
 			const message = await this.messageModel.findById(messageId);
@@ -1232,6 +1458,7 @@ export class MongodbService {
 			}
 			
 			message.content = content;
+      message.attachments = attachments;
 			await message.save();
       this.logger.log(`editMessage:::Updated message, id=${messageId}`);
       return message;
@@ -2051,11 +2278,13 @@ export class MongodbService {
   ): Promise<ProfilePostingDocument[]> {
     try {
       let postings: ProfilePostingDocument[];
-      if (current) {
+      if(current) {
         postings = await this.profilepostingModel
           .find({ user_wall: userWallId, _id: { $lt: current } })
           .limit(limit)
           .exec();
+        // reverse it
+        postings.reverse();
       } else {
         postings = await this.profilepostingModel
           .find({ user_wall: userWallId })
@@ -2064,7 +2293,7 @@ export class MongodbService {
           .exec();
       }
       this.logger.log(
-        `findProfilePosting:::Found profile postings of userWall: ${userWallId}`,
+        `findProfilePosting:::Found profile postings of userWall: ${userWallId} - ${postings}`,
       );
       return postings;
     } catch (err) {
@@ -2078,7 +2307,7 @@ export class MongodbService {
   async replyProfilePosting(ppId: string, userId: string, message: string): Promise<ProfilePostingDocument> {
     try {
       const [profilePosting, user] = await Promise.all([
-        this.profilepostingModel.findById(ppid),
+        this.profilepostingModel.findById(ppId),
         this.findUserById(userId)
       ]);
 

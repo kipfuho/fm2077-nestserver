@@ -559,7 +559,9 @@ export class UserControllerV2 {
     if (!result) {
       throw new HttpException('Verification failed', HttpStatus.BAD_REQUEST);
     }
-    return true;
+    return {
+      message: 'Verified successfully',
+    }
   }
 
   @HttpCode(HttpStatus.OK)
@@ -818,6 +820,37 @@ export class UserControllerV2 {
     };
   }
 
+  @HttpCode(HttpStatus.OK)
+  @Public()
+  @Get('thread/search')
+  async searchThread(
+    @Query('forumId') forumId: string,
+    @Query('title') title: string,
+    @Query('member') member: string,
+    @Query('offset') offset: number,
+    @Query('limit') limit: number
+  ) {
+    if(forumId) {
+      const res = this.mongodbService.searchThreadForum(forumId, title, member, offset, limit ?? 20);
+      if(res) return res;
+    } else {
+      const res = this.mongodbService.searchThread(title, member, offset, limit ?? 20);
+      if(res) return res;
+    }
+    throw new HttpException("No threads found", HttpStatus.NOT_FOUND);
+  }
+
+  @HttpCode(HttpStatus.OK)
+  @Public()
+  @Get('thread/search/get-count')
+  async countSearchThread(
+    @Query('forumId') forumId: string,
+    @Query('title') title: string,
+    @Query('member') member: string
+  ) {
+    return await this.mongodbService.countSearchThreads(forumId, title, member);
+  }
+
   /* Message model API
 	-----------------------------------------------------------
 	-----------------------------------------------------------
@@ -852,6 +885,7 @@ export class UserControllerV2 {
       body.messageId,
       req.user.id,
       body.content,
+      body.attachments
     );
 
     if (!result) {
@@ -1018,7 +1052,7 @@ export class UserControllerV2 {
       );
     }
     return {
-      message: 'Created new profile posting',
+      message: 'Created new profile posting. You should refresh the page for accurate location of the newly created post',
       item: profilePosting,
     };
   }
@@ -1131,13 +1165,12 @@ export class UserControllerV2 {
   }
 
   @HttpCode(HttpStatus.OK)
-  @Public()
   @Get('bookmark/get')
   async getBookmark(
     @Query('bookmarkId') bookmarkId: string,
-    @Query('userId') userId: string,
     @Query('current') current: string,
     @Query('limit') limit: number,
+    @Req() req: any
   ) {
     if (bookmarkId) {
       const bookmark = await this.mongodbService.findBookmarkById(bookmarkId);
@@ -1148,7 +1181,7 @@ export class UserControllerV2 {
     }
 
     const bookmark = await this.mongodbService.findBookmarkOfUser(
-      userId,
+      req.user.id,
       current,
       limit,
     );

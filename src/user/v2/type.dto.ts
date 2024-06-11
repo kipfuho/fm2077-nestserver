@@ -115,6 +115,8 @@ export class UpdateMessage {
 
   @IsString()
   content: string;
+
+  attachments: string[];
 }
 
 export class UpdateUsername {
