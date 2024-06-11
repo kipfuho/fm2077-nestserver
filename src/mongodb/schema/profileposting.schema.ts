@@ -15,6 +15,18 @@ export class ProfilePosting {
 	@Prop()
 	message: string;
 
+	@Prop([{type: {
+		user: {type: String},
+		message: {type: String},
+		create_time: {type: Date},
+		_id: false
+	}}])
+	replies: Array<{
+		user: string;
+		message: string;
+		create_time: Date;
+	}>;
+
 	@Prop()
 	create_time: Date;
 }
